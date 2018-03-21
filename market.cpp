@@ -7,7 +7,6 @@ a simulation/representation of the algorithms involved in an enhanced market plu
 #include <iostream> //for console io
 #include <fstream>  //for file io
 #include <cstring>  //for memset
-#include <vector>
 
 //for delays
 #include <chrono>
@@ -131,8 +130,9 @@ void displayInventory   (Inventory invData, int selY, int selX);
 void displayHash        (InvHash hashtag); //probably wont ever get this running correctly
 
 // displaying filesystem functions.....yeah i dont know where these go either
-void displayMarketLog(int ID);        // -2 for just the ballance, -1 for full log, and some number for that item
-void displayPlayerLog(int verbosity); //1 for basic info 2 for basic info and inventory
+void displayMarketLog(int ID);                // -2 for just the ballance, -1 for full log, and some number for that item
+void displayMarketGraph(int ID);  // displays the price of something over time as a graph -1 for market ballance
+void displayPlayerLog(int verbosity);         //1 for basic info 2 for basic info and inventory
 
 // reference FUNCTIONS (config? ¯\_(ツ)_/¯)
 
@@ -196,7 +196,6 @@ config configTable = getConfig();
 
 int main(){
   srand(time(NULL));
-
   //menue settup
   string title = "Main Menue";
   string discription = "Market Plus, a simulation/representation of the algorithms involved in an enhanced market plugin concept for minecraft. By Speed";
@@ -480,8 +479,8 @@ void functionTester(){
         case '4':
         GroupTitle = "Retrieve group";
         groupDiscription = "Functions that retrieve data from storage into memory";
-        groupOptions[0] = "1 retrievePlayer()  ";
-        groupOptions[1] = "2 retrieveMarketToday()     ";
+        groupOptions[0] = "1 retrievePlayer()     ";
+        groupOptions[1] = "2 retrieveMarketToday()";
         groupRunning = true;
         displayMenue(GroupTitle,groupDiscription,groupOptions,sizeof(groupOptions));
         do{
@@ -505,6 +504,7 @@ void functionTester(){
         groupDiscription = "Functions that display the data in memory";
         groupOptions[0] = "1 displayMarketLog()";
         groupOptions[1] = "2 displayPlayerLog()";
+        groupOptions[2] = "3 displayMarketGraph()";
         groupRunning = true;
         displayMenue(GroupTitle,groupDiscription,groupOptions,sizeof(groupOptions));
         do{
@@ -517,20 +517,29 @@ void functionTester(){
               case '1':
               subtitle = "displayMarketLog()";
               subdiscription = "enter parameter for displayMarketLog()";
-              subOptions[0] = "enter -2 to display full market logs         ";
-              subOptions[1] = "enter -1 to display just the market ballence ";
-              subOptions[2] = "some ID for specific item                    ";
+              subOptions[0] = "-2 full market logs";
+              subOptions[1] = "-1 market ballence ";
+              subOptions[2] = "item ID sale price ";
               displayMenue(subtitle,subdiscription,subOptions,sizeof(subOptions));
               getInput(">",parameter); //i should write in som input verifacation here... mabe later
               displayMarketLog(parameter); break;
               case '2':
               subtitle = "displayPlayerLog()";
               subdiscription = "enter parameter for displayMarketData()";
-              subOptions[0] = "enter 1 to display basic info               ";
-              subOptions[1] = "enter 2 to display basic info and inventory ";
+              subOptions[0] = "1 basic info               ";
+              subOptions[1] = "2 basic info and inventory ";
               displayMenue(subtitle,subdiscription,subOptions,sizeof(subOptions));
               getInput(">",parameter); //i should write in som input verifacation here... mabe later
-              displayPlayerLog(parameter); break;
+              displayPlayerLog(parameter);
+              break;
+              case '3':
+              subtitle = "displayMarketGraph()";
+              subdiscription = "enter parameter for displayMarketGraph()";
+              subOptions[0] = "-1 market ballence";
+              subOptions[1] = "item ID sale price";
+              displayMenue(subtitle,subdiscription,subOptions,sizeof(subOptions));
+              getInput(">",parameter); //i should write in som input verifacation here... mabe later
+              displayMarketGraph(parameter); break;
             }
           }
         }while(groupRunning);
@@ -1703,6 +1712,94 @@ bool logMarket(market data){
   return true;
 }
 
+// ill probably make this into its own function later then
+void displayMarketGraph(int ID){
+  // Create our objects.
+  fstream countstream;
+  int count = 0;
+  countstream.open ("market.bin", ios::binary | ios::in);
+  if(countstream.is_open()){
+    countstream.seekg(0, ios::end);
+    count = countstream.tellg()/sizeof(market); //retuns number of players in file
+  }
+  countstream.close();
+
+  //display length
+  int length = count;
+
+  //limmit table display
+  if(length > display_Width){
+    length = display_Width;
+  }
+
+  //declare table object
+  float valueTable[length];
+
+  //build table of the last length market items
+  fstream readStream;
+  readStream.open ("market.bin", ios::binary | ios::in);
+  if(readStream.is_open()){
+    int ArrayIndex = 0;
+    for(int i = count - length; i < count; i++){
+      market temp;
+      readStream.seekg(i * sizeof(market), ios::beg);
+      readStream.read(reinterpret_cast <char *> (&temp), sizeof(market));
+      if(!readStream.fail()){
+        if(ID != -1)
+        valueTable[ArrayIndex] = temp.thing[ID].salePrice;
+        else
+        valueTable[ArrayIndex] = temp.ballance;
+      }
+      else{
+        valueTable[ArrayIndex] = 0; //if for whatever reaon there is read error, 0
+      }
+      ArrayIndex++;
+    }
+  }
+  readStream.close();
+
+  //get its limits
+  float value,base,cealing;
+  //set limmits to the first value
+  value = base = cealing = valueTable[0];
+  //run though table getting the gighest and lowest value
+  for(int i = 0; i < length; i++){
+    value = valueTable[i];
+    if(base > value){
+      base = value;
+    }
+    if(cealing < value){
+      cealing = value;
+    }
+  }
+
+  //expand limmits to prevent crash when limish are equal because -nan
+  cealing++;
+  base--;
+
+  cealing -= base;
+  int size = 10;
+  string grid[length];
+  for(int i = 0; i < length; i++){
+    valueTable[i] -= base;
+    valueTable[i] /= cealing;
+    string block;
+    block.append(string(size - ceil(valueTable[i] * size ),' '));
+    block.push_back('#');
+    block.append(string(ceil(valueTable[i] * size ),'-'));
+    grid[i] = block;
+  }
+
+  //turn grid sideways and dsiplay it character by character
+  for(int j = 0; j < size + 1; j++){
+    string outstring;
+    for(int i = 0; i < length; i++){
+      outstring.push_back(grid[i][j]);
+    }
+    CenterString(outstring);
+  }
+}
+
 // -2 for just the ballance, -1 for full log, and some number for that item
 void displayMarketLog(int ID){
   // Create our objects.
@@ -1711,11 +1808,10 @@ void displayMarketLog(int ID){
   int index = 0;
   readStream.open ("market.bin", ios::binary | ios::in);
   if(ID >= 0) displayMarketHeadder();
-  readStream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
+  readStream.read(reinterpret_cast <char *> (&temp), sizeof(market));
   while(!readStream.fail()){
-
     if(ID >= 0) LeftString(getItemData(temp.thing[ID],-1,-1,-1));
-    else if(ID == -2){
+    else if(ID == -1){
       LeftString(build("Day :",index + 1,build(" market ballance :",temp.ballance," cash"))); //probably one of the coolest lines ive ever written i didnt know build was so awesome
     }
     else{
@@ -1724,8 +1820,8 @@ void displayMarketLog(int ID){
     }
     //display
     index++; //increment index
-    readStream.seekg(index * sizeof(temp), ios::beg); //GO TO NEXT Market log entery
-    readStream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
+    readStream.seekg(index * sizeof(market), ios::beg); //GO TO NEXT Market log entery
+    readStream.read(reinterpret_cast <char *> (&temp), sizeof(market));
   }
   readStream.close();
 }
@@ -2012,6 +2108,8 @@ string String_2Decimals(string arg){
   while(true){
     if(arg[i] == '.' && arg[i + 1] != '\0' && arg[i + 2] != '\0')
     arg.erase(i+3,arg.length());
+    if(arg[i] == '.' && arg[i + 1] == '0' && arg[i + 2] == '0')
+    arg.erase(i,arg.length());
     i++;
     if(arg[i] == '\0') break;
   }
