@@ -4,25 +4,33 @@
 #include <cstring>  //for memset
 #include <algorithm> //for min and max
 
-const int display_Width = 60;
+const int display_Width = 300;
 
 using namespace std;
 
-void displayGraph(float data[], int length){
+void displayGraph(float data[][display_Width], int sets, int length){
   // constants
-  const int gridWidth = 7, gridHeight = 5, height = 21; //height of the output graph
+  const int gridWidth = 45, gridHeight = 3, height = 51; //height of the output graph
 
   //domain restriction
   if(length > display_Width - 12)
   length = display_Width - 12; //if the length is too long limmit it
 
-  //get the limmits and a copy of the data with the search domain of length
-  float cealing = *max_element(data,data+length);
-  float base = *min_element(data,data+length);
+  //get the minimum and maximum values of each element of each set ...
+  // get the max and minimum values of the first set
+  float cealing = *max_element(data[0],data[0]+length);
+  float base = *min_element(data[0],data[0]+length);
+  //get the max and minimum values of the rest of the sets
+  for(int i = 1; i < sets; i++){
+    //since the max_element wont work on this 2d array,
+    //i need to get each max and min value for each on the 1d arrays in the 2d array
+    //this would have gotten really messy without min and max
+    cealing = max(cealing,*max_element(data[i],data[i]+length));
+    base = min(base,*min_element(data[i],data[i]+length));
+  }
 
   //if the limmits are the same the graph is imposible, print the single value and return
   if(base == cealing){
-    //therefore cealing = celing2 not that i needed to know that or anything
     cout << base;
     return;
   }
@@ -31,10 +39,8 @@ void displayGraph(float data[], int length){
   cout << "width " << display_Width << endl;
   cout << "height " << height << endl;
   getchar();
-
   //dsiaplay grid sideways with grid lines and axis markers
   for(int j = height - 1; j >= 0; j--){
-
     //index
     float index = ((j * ((cealing - base)/(height - 1))) + base);
 
@@ -50,17 +56,27 @@ void displayGraph(float data[], int length){
 
     //y axis
     //conditions where the index should be shown
-    if (top || bottom || horizontal || zero)
-    cout << setw(10) << index;
+    if (top || bottom || horizontal || zero){
+      cout << setw(10) << index;
+      cout << ' ';
+    }
     else
-    cout << string(10,' ');
+    cout << string(11,' ');
 
     //each line
     for(int i = length - 1; i >= 0; i--){
-      if(j == (int)( (data[i] - base) / (cealing - base) * height) ){ //graph plot
-        cout << '*';
+      int range[sets];
+      bool anyRange = false;
+      for(int k = 0; k < sets; k++){
+        range[k] = (data[k][i] - base) / (cealing - base) * height;
+        if(j == range[k]){
+          anyRange = true;
+          cout << k + 1;
+          break;
+        }
       }
-      else{ //grid lines
+      //if the value of anny of the sets are within range of the plot ...
+      if(!anyRange){ //grid lines
         //terms
 
         //falls on an extents
@@ -75,7 +91,7 @@ void displayGraph(float data[], int length){
         //major axis
         if (right)
         cout << 'I';
-        else if(index == 0) //compare the index because j will always be 0 on the bottom but the index could be 0 anywhere
+        else if(zero) //compare the index because j will always be 0 on the bottom but the index could be 0 anywhere
         cout << '=';
 
         //grid intersections
@@ -118,17 +134,16 @@ void displayGraph(float data[], int length){
 }
 
 
-
 int main(){
   srand(time(NULL));
-
-  float data[display_Width];
+  float data[2][display_Width];
   memset(data,0,sizeof(data));
-  for(int i = display_Width - 1; i >= 0; i--){
-    data[i] = -i;
+  for(int i = 0; i < display_Width; i++){
+    data[0][i] = - 2 * cos((float)(i * 3.14159265358979 / 180) * 4);
+    data[1][i] = -sin((float)(i * 3.14159265358979 / 180) * 4);
   }
 
-  displayGraph(data,200);
+  displayGraph(data,2,361);
 
   return 0;
 }

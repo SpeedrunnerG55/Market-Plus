@@ -7,6 +7,7 @@ a simulation/representation of the algorithms involved in an enhanced market plu
 #include <iostream> //for console io
 #include <fstream>  //for file io
 #include <cstring>  //for memset
+#include <algorithm> //for min and max
 
 //for delays
 #include <chrono>
@@ -77,23 +78,23 @@ struct player{
   char name[nameLength];
   float cashBallance;   //amount of cash
   float creditBallance; //should be left out in implimentation (crafteconomy should store this)
-  int quantityMined;
+  int quantityPrinted;
 };
 
 //main FUNCTIONS
 //actual functions that would exist
-void newDay(); //mid day each day
-bool processItemTransaction (int UUID, int ID, int quantity);                   //for every time something is bought or sold for cash
-bool printCash              (int UUID, int quantity);                           //print money for emralds
-bool exchangeChash          (int UUID, float amount);                           //exchange cash for credit not the other way around
+void newDay(market &marketToday); //mid day each day
+bool processItemTransaction (market &marketToday, player &playerData, int ID, int quantity); //for every time something is bought or sold for cash
+void printCash              (market &marketToday, player &playerData, int quantity);         //print money for emralds
+void exchangeChash          (market &marketToday, player &playerData, float amount);         //exchange cash for credit not the other way around
 //edit sub group
 void addToInventory (InvHash &inventoryHash, int ID, int &quantity);    // edits the player inventory to add or remove items from it
-bool addToSlot      (int &slotID, int &slotAmt, int &quantity, int ID); // adds quantity of id to slot
-void editSlot       (int &slotID, int &slotAmt, int &quantity, int ID); // overwrites quantity of id to slot
+bool addToSlot      (int &slotID, int &slotQTY, int &quantity, int ID); // adds quantity of id to slot
+bool verifySlot     (int &slotID, int &slotQTY, int &quantity, int ID); // verifys the slot parameters and ajdusts quantity if needed, returns false if the slot
 void editPrice      (float &price, float arg);                          // overwrite price for item
-int retrievePlayerUUID();
+int retrievePlayerUUID();                                               //text gui for a selection based player retriever
 
-bool makeAmo                (int UUID, int quantity); //exchange credit for amo (am unsure about this one)
+void makeAmo        (market &marketToday, player &playerData, int quantity); //exchange credit for amo (am unsure about this one)
 
 // program functions
 void functionTester();                // tests each actual functions seperatly
@@ -118,23 +119,26 @@ using namespace std; // i keep on forgetting string is in the std namespace
 
 //  Display FUNCTIONS
 
+//for both (potentially)
+void displayGraph(float data[], int length); //displays the last length'th data  elements in an array as a graph
+
 // for market
 void displayMarketData  (market marketData, int selY, int selX); //displays market information on every item with a selector
 void displayMarketHeadder();                      //displays labels for each peice of information of the market data
 string getItemData (item itemData, int current, int selY, int selX);   //Gets item data for item and returns it as a formatted string with a selector :o
 
 // for Player
-string returnPlayerData  (player playerData);  //returns basic player data for cash and creddit ballance and quantity minned as a string
+string returnPlayerData  (player playerData); //returns basic player data for cash and creddit ballance and quantity minned as a string
 string returnPlayerHeadder();                 //returns labels for each peice of information of the player data as a string
 void displayInventory   (Inventory invData, int selY, int selX);
 void displayHash        (InvHash hashtag); //probably wont ever get this running correctly
 
 // displaying filesystem functions.....yeah i dont know where these go either
 void displayMarketLog(int ID);                // -2 for just the ballance, -1 for full log, and some number for that item
-void displayMarketGraph(int ID);  // displays the price of something over time as a graph -1 for market ballance
+void displayMarketGraph(int ID, int length);  // displays the price of something over time as a graph -1 for market ballance
 void displayPlayerLog(int verbosity);         //1 for basic info 2 for basic info and inventory
 
-// reference FUNCTIONS (config? ¯\_(ツ)_/¯)
+// reference FUNCTIONS
 
 //probably wont need this one
 string lookupItem(int id); //returns the name of the item (will change to config file later...mabe)
@@ -147,7 +151,7 @@ struct config{
 };
 
 config getConfig(); //attempt at config file indexer
-bool createConfig();      //creates template config
+bool createConfig();//creates template config
 
 bool blackList(int id); //list of items illigal to buy or sell (will change to config file later)
 int priceBase (int id); //is base for price (will change to config file later)
@@ -160,9 +164,10 @@ bool updateMarketToday(market today);   //overwrites market today
 bool logMarket        (market market);  //saves market object to market log and overwrites market today
 
 // for player
-player retrievePlayer(int UUID);  // retrieve player information out of player database and player ballance log
+player retrievePlayer(int UUID, int index);  // retrieve player information out of player database and player ballance log
 bool updatePlayer(player data);   // updates player information in player log
 bool purgeMining();               // purges daily mining log
+
 int getQuantityFromInv(Inventory inventoryData, int ID); //returns quantity of specific item in player inventory
 
 /*  pauses execution for x milliseconds  */
@@ -175,6 +180,7 @@ void sleep(int delay){
 
 //custom graphical functions (this could be a class probably)
 const int display_Width = 77;
+
 void printMultiString(string strArray[],int sizeOfStrArray);
 void printLong       (string longString);
 void displayMenue    (string title, string discription, string options[],int sizeofOptions);
@@ -194,12 +200,21 @@ string select(string arg,int selY, int selX, int posY, int posX);
 
 config configTable = getConfig();
 
+string progress(int current, int total){
+  string bar;
+  bar.append("[");
+  bar.append(string(current + 1,'#'));
+  bar.append(string(total - (current + 1),' '));
+  bar.append("]");
+  return bar;
+}
+
 int main(){
   srand(time(NULL));
   //menue settup
   string title = "Main Menue";
   string discription = "Market Plus, a simulation/representation of the algorithms involved in an enhanced market plugin concept for minecraft. By Speed";
-  string options[]= {"1 Function-tester","Esc Quit"};
+  string options[]= {"1 Function-tester","2 Simulation","Esc Quit"};
 
   //display menue all in one line :D
   displayMenue(title,discription,options,sizeof(options));
@@ -215,7 +230,7 @@ int main(){
         case KEY_ESCAPE: running = false; break;
 
         case '1': functionTester();  break;
-        // case '2': Simulation();   break; //still putting this off
+        case '2': Simulation();      break; // this will probably break a lot
         case '9': running = false;   break;
         default:
         printLine('#');
@@ -236,9 +251,9 @@ int main(){
 
 bool createConfig(){
   // Create our objects.
-  fstream WriteStream;
-  WriteStream.open ("file.cfg", ios::binary | ios::out); //attempt to open file
-  if(!WriteStream.is_open()){ //check if empty
+  fstream writestream;
+  writestream.open ("file.cfg", ios::binary | ios::out); //attempt to open file
+  if(!writestream.is_open()){ //check if empty
     return false;
   }
   else{
@@ -250,8 +265,8 @@ bool createConfig(){
       temp.blackList[i] = blackList(i); //lol
       temp.priceBase[i] = priceBase(i); //lol
     }
-    WriteStream.write(reinterpret_cast <char *> (&temp), sizeof(config));
-    WriteStream.close();  //close file
+    writestream.write(reinterpret_cast <char *> (&temp), sizeof(config));
+    writestream.close();  //close file
     return true;
   }
 }
@@ -285,15 +300,30 @@ market createMarket(){
   return marketData;
 }
 
-player createPlayer(){
+player createPlayer(int UUID){
   player playerData;
   memset(playerData.inventoryHash.HotTag,0,sizeof(playerData.inventoryHash.HotTag));
   memset(playerData.inventoryHash.InvTag,0,sizeof(playerData.inventoryHash.InvTag));
-  playerData.UUID = 0;
+  playerData.UUID = UUID; //i could pass 0 here if i wanted it to be a null player
   memset (playerData.name,' ',sizeof(playerData.name));
+  string name = lookupItem(rand() % numberOfItems);
+  bool reachedEnd = false;
+  for(int i = 0; i < nameLength; i++){
+    if(!reachedEnd){
+      if(name[i] != '\0')
+      playerData.name[i] = name[i];
+      else{
+        playerData.name[i] = '\0';
+        reachedEnd = true;
+      }
+    }
+    else{
+      playerData.name[i] = '-';
+    }
+  }
   playerData.cashBallance = 0;
   playerData.creditBallance = 0;
-  playerData.quantityMined = 0;
+  playerData.quantityPrinted = 0;
   return playerData;
 }
 
@@ -313,14 +343,16 @@ void functionTester(){
   // data retrieved will persist untill new data is read
   //SETTUP OBJECTS
   market marketData = createMarket();
-  player playerData = createPlayer();
-
-
+  player playerData = createPlayer(0);
 
   //menue settup
   string title = "Function-tester";
   string discription = "test each function manually, and see their effects, generate functions generate data and stores it in memory, retrieve functions retrieve data stored on disc (database), update functions store and/or updates information stored on disc (database)";
-  string options[]= {"1 Main group","2 generate group","3 Edit group","4 retrieve group","5 Display Log","6 Display group","7 Update group","Esc Quit"};
+  string options[]= {
+    "1 Main group","2 generate group","3 Edit group",
+    "4 retrieve group","5 Display Log","6 Display group",
+    "7 Update group","Esc Quit"
+  };
 
   //Group menue settup
   string GroupTitle;
@@ -377,39 +409,48 @@ void functionTester(){
               //quit
               case KEY_ESCAPE: running = false; break;
 
-              case '1': newDay(); break;
+              case '1': newDay(marketData); break;
               case '2':
               LeftString("processItemTransaction(UUID,ID,quantity)");
-              UUID = retrievePlayerUUID();
+              getInput("ID",ID);
+              getInput("quantity",quantity);
+              if(playerData.UUID == 0){
+                UUID = retrievePlayerUUID();
+                playerData = retrievePlayer(UUID,-1);
+              }
               if(UUID == 0){
                 CenterString("Null player detected... who did this? generate a player");
                 break;
               }
-              getInput("ID",ID);
-              getInput("quantity",quantity);
-              processItemTransaction(UUID,ID,quantity);
+              processItemTransaction(marketData,playerData,ID,quantity);
               break;
 
               case '3': ;
               LeftString("printCash(UUID,quantity)");
-              UUID = retrievePlayerUUID();
+              if(playerData.UUID == 0){
+                UUID = retrievePlayerUUID();
+                playerData = retrievePlayer(UUID,-1);
+              }
               if(UUID == 0){
                 CenterString("Null player detected... who did this? generate a player");
                 break;
               }
               getInput("quantity",quantity);
-              printCash(UUID,quantity);
+              printCash(marketData,playerData,quantity);
               break;
 
               case '4': ;
               LeftString("exchangeChash(UUID,amount)");
-              UUID = retrievePlayerUUID();
+              if(playerData.UUID == 0){
+                UUID = retrievePlayerUUID();
+                playerData = retrievePlayer(UUID,-1);
+              }
               if(UUID == 0){
                 CenterString("Null player detected... who did this? generate a player");
                 break;
               }
               getInput("Amount",amount);
-              exchangeChash(UUID,amount);
+              exchangeChash(marketData,playerData,amount);
               break;
             }
           }
@@ -444,7 +485,7 @@ void functionTester(){
               playerData = generatePlayer(parameter);
               break;
               case '2': marketData = generateMarket(); break;
-              case '3': playerData = createPlayer();   break;
+              case '3': playerData = createPlayer(0);   break;
               case '4': marketData = createMarket();   break;
             }
           }
@@ -490,7 +531,7 @@ void functionTester(){
             char menue = GetChar();
             menue = tolower(menue);
             switch (menue) {
-              case '1': retrievePlayer(retrievePlayerUUID()); break;
+              case '1': playerData = retrievePlayer(retrievePlayerUUID(),-1); break;
               case '2': marketData = retrieveMarketToday(); break;
             }
           }
@@ -522,15 +563,16 @@ void functionTester(){
               subOptions[2] = "item ID sale price ";
               displayMenue(subtitle,subdiscription,subOptions,sizeof(subOptions));
               getInput(">",parameter); //i should write in som input verifacation here... mabe later
-              displayMarketLog(parameter); break;
+              displayMarketLog(parameter);
+              break;
               case '2':
               subtitle = "displayPlayerLog()";
               subdiscription = "enter parameter for displayMarketData()";
               subOptions[0] = "1 basic info               ";
               subOptions[1] = "2 basic info and inventory ";
               displayMenue(subtitle,subdiscription,subOptions,sizeof(subOptions));
-              getInput(">",parameter); //i should write in som input verifacation here... mabe later
-              displayPlayerLog(parameter);
+              getInput(">",UUID); //i should write in som input verifacation here... mabe later
+              displayPlayerLog(UUID);
               break;
               case '3':
               subtitle = "displayMarketGraph()";
@@ -538,8 +580,11 @@ void functionTester(){
               subOptions[0] = "-1 market ballence";
               subOptions[1] = "item ID sale price";
               displayMenue(subtitle,subdiscription,subOptions,sizeof(subOptions));
+              getInput(">",ID); //i should write in som input verifacation here... mabe later
+              LeftString("number of days to go back (limmit about 60)");
               getInput(">",parameter); //i should write in som input verifacation here... mabe later
-              displayMarketGraph(parameter); break;
+              displayMarketGraph(ID,parameter);
+              break;
             }
           }
         }while(groupRunning);
@@ -587,7 +632,7 @@ void functionTester(){
             char menue = GetChar();
             menue = tolower(menue);
             switch (menue) {
-              case '1': updatePlayer(playerData);      break;
+              case '1': updatePlayer(playerData); break;
               case '2':
               subtitle = "updateMarketToday()";
               subdiscription = "enter parameter for updateMarketToday()";
@@ -640,18 +685,18 @@ int retrievePlayerUUID(){
 
   // Create our objects.
   player temp;
-  fstream readStream;
+  fstream readstream;
   int index = 0;
-  readStream.open ("player.bin", ios::binary | ios::in);
-  readStream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
+  readstream.open ("player.bin", ios::binary | ios::in);
+  readstream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
   while(index < count){ //i alreaddy know how manny players there are, Just build the table
     playerTable[index] = temp;
     //display
     index++; //increment index
-    readStream.seekg(index * sizeof(temp), ios::beg); //GO TO NEXT PLAYER
-    readStream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
+    readstream.seekg(index * sizeof(temp), ios::beg); //GO TO NEXT PLAYER
+    readstream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
   }
-  readStream.close();
+  readstream.close();
 
   bool running = true; // boolian that tells
   int selY = 1; //position of selector
@@ -759,7 +804,7 @@ void EditPlayer(player &playerData){
   displayMenue(title,discription,options,sizeof(options));
 
   bool running = true; // boolian that tells
-  int quantity = 0, ID = 0, selectionID = 0, selectionAMT = 0;
+  int quantity = 0, ID = 0, selectionID = 0, selectionQTY = 0;
   float amount = 0;
   //for reference ... i do this a lot
   //int item[y][x][z]; //Inventory [slot y][slot x][id,quantity]
@@ -767,27 +812,52 @@ void EditPlayer(player &playerData){
 
   do{
     if(KeyHit()){
-      //depending on where the selection the selection ID and quantity need to be based on the right data set
-      if(y > -1){
-        selectionAMT = inventoryData.item[y][x][1];
-        selectionID = inventoryData.item[y][x][0];
-      }
-      else{
-        selectionAMT = inventoryData.hotbar[x][0];
-        selectionID = inventoryData.hotbar[x][0];
+      char menue = GetChar();
+      //dont pack or unpack if user is just moving the selection around
+      //or els silleh things will happen
+      if(!(menue == 'w' || menue == 'a' || menue == 's' || menue == 'd')){ //friggen demorgan
+        //depending on where the selection the selection ID and quantity need to be based on the right data set
+        if(selY >= 0){
+          selectionQTY = inventoryData.item[selY][selX][1];
+          selectionID = inventoryData.item[selY][selX][0];
+        }
+        else{
+          selectionQTY = inventoryData.hotbar[selX][1];
+          selectionID = inventoryData.hotbar[selX][0];
+        }
       }
       cout << string(100,'\n');
-      char menue = GetChar();
-      // this, this right here is cancer.
-      // im using the selector to select what item to affect but the affect wont nesisarally (most likley wont happen in that slot)
-      // for the affect to be bounded by the slot i would have to send the selection information to the edit inventory function and then
-      // forgoing the forloops and processing the slot coordinates given to it... now that i say it that way it dosnet seam all that bad,
-      // I could pas -1,-1 for it to use any slot as before and pass it a slot coordinate if i want it to attemtp to edit a specific slot
-      // i am also givving the user full controll ofi the edit inventory function.. luckly the functi- wait why am i even using the edit inventory
-      // function when i could be using the process slot function, it usses the unhashed data, i could unpack the slot at the selection, edit it, then repack it into
-      // the playerdata for it to be updated at the end. now where talking :3
-      // I really need to stop writting these long winded --dissertations-- rambelings in the comments... not like annyones reading
       switch (menue) {
+        //selection section
+        //selection movement
+        case 'w':
+        selY--;//chage position
+        //validate position
+        if(selY < -1){
+          selY = 2;
+        }
+        break;
+
+        case 'a':
+        selX--;
+        selX %= 9;
+        if(selX < 0){
+          selX = 8;
+        }
+        break;
+
+        case 's':
+        selY++;
+        if(selY > 2){
+          selY = -1;
+        }
+        break;
+
+        case 'd':
+        selX++;
+        selX %= 9;
+        break;
+
         //inventory section
         case '1':
         case '2':
@@ -798,7 +868,7 @@ void EditPlayer(player &playerData){
           getInput(">",ID);
         }
         else ID = selectionID; //no if needed here because the selection slot ID was alreaddy determined :D
-        case '4': //do nothing here just enter the next swich and put it in the end
+
         switch (menue) { //switchseption to cover each different quantity after for each case
           case '1':
           printLong("Enter the quantity to add to the slot, positive or negative");
@@ -806,27 +876,37 @@ void EditPlayer(player &playerData){
           break;
           case '2': quantity = 1;  break;
           case '3': quantity = -1; break;
-          case '4':
-          ID = selectionID; //always the selectionID
-          quantity = -selectionAMT; // negitiv the quantity the slot contains so it becomes 0
         }
 
         //for reference
-        //inline void addToSlot(int slotID, int slotAmt, float quantity, int ID)
+        //inline void addToSlot(int slotID, int slotQTY, float quantity, int ID)
         //in any case <.< i want the same action to take place with these same variables so unless the user exits, this would happen every time
-        addToSlot(selectionID,selectionAMT,quantity,ID); //passing both ID and selectionID because the selection might be air, and then the id
+        addToSlot(selectionID,selectionQTY,quantity,ID); //passing both ID and selectionID because the selection might be air, and then the id
         quantity = 0; //reset it to 0 reguardless of the outcome, since if it did not go into the inventory there is nowhere else for it to go
+        break;
 
-        break; // finally break out of the inventory edit section
-
-        //for reference
-        // void editSlot(int &slotID, int &slotAmt, int &quantity, int ID)
-        case '5':
-        printLong("Enter the ID for slot");
+        //edit slot
+        case '4':
+        printLong("Enter ID");
         getInput(">",ID);
-        printLong("Enter the quantity to add to the slot, positive or negative");
+        printLong("Enter Quantity");
         getInput(">",quantity);
-        editSlot(selectionID,selectionAMT,quantity,ID);
+        //set the values
+        selectionID = ID;
+        selectionQTY = quantity;
+        //for reference
+        //bool verifySlot(int &slotID, int &slotQTY, int &quantity, int ID){
+        verifySlot(selectionID,selectionQTY,quantity,ID); //even though they are equal, this is the proper syntax for this function....OCD much?
+        quantity = 0; //reset it to 0 reguardless of the outcome, since if it did not go into the inventory there is nowhere else for it to go
+        break;
+
+        // purge slot
+        // void editSlot(int &slotID, int &slotQTY, int &quantity, int ID)
+        case '5':
+        selectionQTY = 0;
+        selectionID = 0;
+        // i almost used editSlot() for this... seesh
+        break;
 
         //money section
         case '6':
@@ -840,8 +920,11 @@ void EditPlayer(player &playerData){
         tempData.creditBallance = amount;
         break;
 
+        //exit section
         case '8': running = false; break;  //exit the switch and the do loop, repack, save then exit the function
         case '9': running = false; return; //just exit the entire function without making any changes
+
+        //invalid input section
         default:
         printLine('#');
         printLine(' ');
@@ -851,14 +934,18 @@ void EditPlayer(player &playerData){
         CenterString(key); // << shows incorrect key pressed
       }
 
-      // amagin if i nneded to repack here, oh that would have been awefull
-      if(y > -1){
-        inventoryData.item[y][x][1] = selectionAMT;
-        inventoryData.item[y][x][0] = selectionID;
-      }
-      else{
-        inventoryData.hotbar[x][0] = selectionAMT;
-        inventoryData.hotbar[x][0] = selectionID;
+      //dont pack or unpack if user is just moving the selection around
+      //or els silleh things will happen
+      if(!(menue == 'w' || menue == 'a' || menue == 's' || menue == 'd')){
+        // amagin if i nneded to repack here, oh that would have been awefull
+        if(selY >= 0){
+          inventoryData.item[selY][selX][1] = selectionQTY;
+          inventoryData.item[selY][selX][0] = selectionID;
+        }
+        else{
+          inventoryData.hotbar[selX][1] = selectionQTY;
+          inventoryData.hotbar[selX][0] = selectionID;
+        }
       }
 
       CenterString(returnPlayerData(tempData)); //display
@@ -994,32 +1081,106 @@ void EditMarket(market &marketData){
 }
 
 
-// void Simulation(){
-//
-//   market marketData = generateMarket();
-//   updateMarketToday(marketData);
-//   player playerBase[10];
-//   for(int i = 0; i < 10; i++){
-//     playerBase[i] = generatePlayer(-1);
-//   }
-//   bool running = true;
-//   do{
-//
-//
-//
-//
-//     CenterString("hit enter to advance to next day");
-//     CenterString("hold enter if you want to fast forward");
-//     getchar();
-//     newDay();
-//   }while(running);
-// }
+void dailyActions(player playerBase[10], market &marketToday){
+  printLine('=');
+  CenterString("daily actions!");
+  printLine('=');
+  // LeftString(returnPlayerHeadder());
+  for(int i = 0; i < 10; i++){ //for each player
+    // player playerData = retrievePlayer(0,i); <- more represens what would happen, keeping the most of the data out of memory,
+    // so if/when the server shuts down sudenly noone loses anything
 
+    int quantity;
+    quantity = rand() % 2; //add a random quantity to players inventory to simulate material gained by normal means
+    addToInventory(playerBase[i].inventoryHash,IDofEmranlds,quantity); //add the amount
 
+    do{
+      quantity = -rand() % 5; //remove a random quantity to players inventory to simulate material lost by normal means
+    }while(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),IDofEmranlds) < -quantity); // make sure amount taken away is not greater than the amount the player has
+    addToInventory(playerBase[i].inventoryHash,IDofEmranlds,quantity); //remove the amount
+
+    if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),IDofEmranlds) > 20){
+      printCash(marketToday,playerBase[i],10);
+    }
+
+    playerBase[i].creditBallance += rand() % 100;
+    playerBase[i].creditBallance -= rand() % 4000;
+
+    if(playerBase[i].creditBallance < 30){
+      exchangeChash(marketToday,playerBase[i],-playerBase[i].creditBallance);
+    }
+
+    for(int j = 0; j < numberOfItems; j++){ //for each item
+      if(!configTable.blackList[j]){ //only update items not on black list
+        // by normal means
+        quantity = rand() % 30; //add a random quantity to players inventory to simulate material gained by normal means
+        addToInventory(playerBase[i].inventoryHash,j,quantity); //add the quantity
+        do{
+          quantity = -rand() % 20; //remove a random quantity to players inventory to simulate material lost by normal means
+        }while(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) < -quantity); // make sure quantity taken away is not greater than the amount the player has
+        addToInventory(playerBase[i].inventoryHash,j,quantity); //remove the quantity
+
+        // by market
+        if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) < 10 ){ //if the player had less than 10 of items attempt buy 10 items
+          quantity = rand() % 20; //atempt to buy a random quantity
+          processItemTransaction(marketToday,playerBase[i],j,-quantity); //negitive because this is from the markets perspective
+        }
+        else if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) > 40){ //if the player had more than 20 of items attempt sell 10 items
+          quantity = rand() % 20; //atempt to sell a random quantity
+          processItemTransaction(marketToday,playerBase[i],j,quantity); //positive because this is from the markets perspective
+        }
+      }
+    }
+    // printLine('-');
+    // CenterString(build("this player has ",getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),IDofEmranlds),"emralds"));
+    // printLine('-');
+    LeftString(returnPlayerData(playerBase[i]));
+    // updatePlayer(playerData); //save actions to player to database <- more represens what would happen, keeping the most of the data out of memory,
+    // so if/when the server shuts down sudenly noone loses anything
+  }
+}
+
+void shiftback(float array[40], float entery){
+  for(int i = 39; i > 0; i--){
+    array[i] = array[i - 1];
+  }
+  array[0] = entery;
+}
+
+void Simulation(){
+  if(!remove("player.bin"))
+  CenterString("deleted playerFile");
+  if(!remove("market.bin"))
+  CenterString("deleted marketFile");
+  if(!remove("Market_Today.bin"))
+  CenterString("deleted marketlog");
+  CenterString("Generating new marketFile");
+  market marketToday = createMarket();
+  float marketLog[40]; //for super fast logging, keeping it in memory.
+  memset(marketLog,3,sizeof(marketLog));
+  CenterString("Generating new players");
+  player playerBase[10];
+  for(int i = 0; i < 10; i++){
+    //due to me wanting to improve preformance, im going to use the filesystem less and keep as much as i can in MEMORY
+    //this reflecs less on the actual operation of the plugin but improves the simulation Speed
+    playerBase[i] = createPlayer(generateUUID());
+    updatePlayer(playerBase[i]);
+  }
+  bool running = true;
+  do{
+    cout << string(100,'\n');
+    CenterString(build("ballance",marketToday.ballance,"$"));
+    // displayMarketGraph(-1,100);
+    dailyActions(playerBase,marketToday);
+    shiftback(marketLog,marketToday.ballance);
+    displayGraph(marketLog,40);
+    newDay(marketToday);
+  }while(running);
+}
 
 //main FUNCTIONS actual functions that would exist
-void newDay(){
-  market newMarket = retrieveMarketToday();
+void newDay(market &newMarket){
+  // market newMarket = retrieveMarketToday();
   for(int i = 0; i < numberOfItems; i++){
     if(!configTable.blackList[i]){
       int change = newMarket.thing[i].quantityChange;
@@ -1027,215 +1188,184 @@ void newDay(){
       if(change != 0)
       noise = (((rand() % 100) * .01) - 0.5) * 0.05;
       float salePrice = newMarket.thing[i].salePrice;
-      if(change < 0)
+      if(change < 0) //selling a lot
       salePrice += salePrice * (.10 + (noise)); //increase average 10%
-      else if(change > 0)
+      else if(change > 0) // buying a lot
       salePrice -= salePrice * (.10 + (noise)); //decrease average 10%
       else
-      CenterString("price remained the same");
       if(change != 0){
         newMarket.thing[i].noise = noise;
         newMarket.thing[i].quantityChange = change;
         newMarket.thing[i].salePrice = salePrice;
       }
     }
-    else{
-      CenterString("blacklisted item!");
-    }
   }
   purgeMining(); //purge player exchange limmit
-  updateMarketToday(newMarket); //overwrites entre entery
-  logMarket(newMarket);
+  // updateMarketToday(newMarket); //overwrites entre entery
+  // logMarket(newMarket); <- Disabled for superSpeed
 }
 
 //for every time something is bought or sold for cash
-bool processItemTransaction(int UUID, int ID, int quantity){
-  market MarketToday = retrieveMarketToday();
-  player playerData = retrievePlayer(UUID);
-  //if market is buying
-  float price = 0;
-  float sourceBallance = 0;
-  int sourceItems = 0;
-  bool buying;
-  if(quantity > 0){ //if buying
-    // quantity is positive
-    // price is negitive ... because a positive times a negitive gives you negitive!
-    buying = true;
-    sourceItems = getQuantityFromInv(unhashInv(playerData.inventoryHash),ID);
-    sourceBallance = MarketToday.ballance;
-    float salePrice = MarketToday.thing[ID].salePrice;
-    price = -(salePrice - (salePrice * .10)); //buy price is 10% less than sale price
+bool processItemTransaction(market &marketToday, player &playerData, int ID, int quantity){
+  if(quantity > 0){ //buying
+    //make sure the player has enough things
+    int playerStock = getQuantityFromInv(unhashInv(playerData.inventoryHash),ID);
+    if(playerStock < quantity){
+      if(playerStock != 0){
+        quantity = playerStock;
+      }
+      else{
+        return false;
+      }
+    }
+    //market is buying
+    //make sure the market has enough money
+    float salePrice = marketToday.thing[ID].salePrice * .8; //market buys for 90% of the normal price
+    if(marketToday.ballance < (quantity * salePrice)){
+      if(marketToday.ballance != 0){//check if the market is crashed. lol
+        quantity = floor(marketToday.ballance / salePrice); //adjust the quantity so the market does have enough
+      }
+      else{
+        return false; //quick fail
+      }
+    }
+    //if quantity has not reached 0
+    if(quantity != 0){ //buying, quantity is positive
+      // Transaction
+      //market
+      marketToday.ballance -= quantity * salePrice; //positive value
+      marketToday.thing[ID].stock += quantity; //positive value
+      marketToday.thing[ID].quantityChange += quantity; //positive value
+      //player
+      playerData.cashBallance += quantity * salePrice; //positive value
+      quantity = -quantity;
+      addToInventory(playerData.inventoryHash,ID,quantity); //negitive value
+      if(quantity != 0){ //feed the negitive quantity back through and put the items back
+        //player
+        playerData.cashBallance += quantity * salePrice; //negitive value
+        //market
+        marketToday.ballance -= quantity * salePrice; //negitive value
+        marketToday.thing[ID].stock += quantity; //negitive value
+        marketToday.thing[ID].quantityChange += quantity; //negitive value
+      }
+    }
+    else{
+      return false; //fail a bit later
+    }
   }
-  else if(quantity < 0){ //if selling
-    // quantity is negitive
-    // price is negitive ... because a negitive times a negitive give you positive!
-    buying = false;
-    sourceItems = MarketToday.thing[ID].stock;
-    sourceBallance = MarketToday.ballance;
-    price = -MarketToday.thing[ID].salePrice;
+  else if(quantity < 0){ //selling
+    //make sure the market has enough things
+    if(marketToday.thing[ID].stock < -(quantity)){ //negitinve since the quantity is negitive
+      if(marketToday.thing[ID].stock != 0){ //check if the market has none of the items. lol
+        quantity = -marketToday.thing[ID].stock; //negitinve since the quantity is negitive
+      }
+      else{
+        return false; //quick fail
+      }
+    }
+    //make sure the player has enough money
+    float salePrice = marketToday.thing[ID].salePrice;
+    if(playerData.cashBallance < -(quantity) * salePrice){ //negitinve since the quantity is negitive, and negitve time a negitve equals a positive
+      if(playerData.cashBallance != 0){//check if the player is broke. lol
+        quantity = -floor(playerData.cashBallance / salePrice); //adjust the quantity so the player does have enough, also negitive
+      }
+      else{
+        return false; //quick fail
+      }
+    }
+    //market is selling
+    if(quantity != 0){ //selling, quantity is negitive
+      //market
+      marketToday.ballance -= quantity * salePrice; // <negitve value
+      marketToday.thing[ID].stock += quantity; // <negitve value
+      marketToday.thing[ID].quantityChange += quantity; // <negitve value
+      //player
+      playerData.cashBallance += quantity * salePrice; // <negitve value
+      quantity = -quantity;
+      addToInventory(playerData.inventoryHash,ID,quantity); // positive value
+      if(quantity != 0){ //feed the negitive quantity back through and put the items back
+        //player
+        playerData.cashBallance += quantity * salePrice; // positive value
+        //market
+        marketToday.ballance -= quantity * salePrice; // positive value
+        marketToday.thing[ID].stock += quantity; // positive value
+        marketToday.thing[ID].quantityChange += quantity; // <negitve value
+      }
+    }
+    else{
+      return false; //fail a bit later
+    }
   }
-  if(sourceItems < abs(quantity)){
-    CenterString("not enough itmes");
-    CenterString("processing all remaining items");
-    quantity = sourceItems;
+  else if(quantity == 0){
+    return false; //fail really fast
   }
-  if(sourceBallance < price * abs(quantity)){
-    CenterString("not enough Cash");
-    CenterString("processing what can be afforded");
-    quantity = floor(sourceBallance / price);
-  }
-  if(quantity == 0){ //if quantity reaches 0 Transaction iss nullified and failed technically i dont have to return but i do to increace effiecency
-    CenterString("Transaction Failed returning");
-    return false;
-  }
-
-  if(!buying){ //flip sign flip sign to negitive even if its negitive alreaddy
-    quantity = -abs(quantity);
-  }
-
-  //works for both selling and buying
-
-  //market values
-  MarketToday.ballance += quantity * price; //if selling this goes up, if buying this goes down
-  MarketToday.thing[ID].stock += quantity;  //if selling this goes down, if buying this goes up
-
-  //player value
-  playerData.cashBallance -= quantity * price;  //if selling this goes down, if buying this goes up
-  quantity = -quantity; // the sign is reverced from the markets perspective to correct the effect it should have on the player
-  addToInventory(playerData.inventoryHash,ID,quantity); //if selling this goes up, if buying this goes down
-  // ** what if player can not hold what he buys **
-  //if by now, quantity is not 0, that means there is left over from when the edit inventory (quantity)
-  //not being able to fill in compleatly all of the items the player tried to purchase.
-  // so the quantity now being negitive needs to be reprocessed through
-  // the transaction equations to reverse the values back to their origical state to match the diffference
-  // between the intended inventory of the player and what the inventory of the player became... wow that was a mouthfull
-  if(quantity != 0){ // basically just.. do these again and everything should be fine (i could have just swapped the signs here but then i would have also had to swap the sign of quantity again, and that quantity of sign swapping would get me verry dizzy)
-    //market values
-    MarketToday.ballance += quantity * price; //if selling this now goes down, if buying this now goes up
-    MarketToday.thing[ID].stock += quantity;  //if selling this now goes up, if buying this now goes down
-    //player value
-    playerData.cashBallance -= quantity * price;  //if selling this now goes up, if buying this now goes down
-  }
-
-  //update player log with new player data, update the market with new market data
-  MarketToday.thing[ID].quantityChange += quantity; //yep thats it, the ID is encoded in the index, and the quantity is the value.
-  // this is just added to the total, and weather of not it is positive or negitive would tetermin if the market is a bull or a bear...either way better get the guns-
-  if((updatePlayer(playerData)) && (updateMarketToday(MarketToday))){
-    return true;
-  }
-  CenterString("ERROR! : something went wrong look up^..."); //specific error messages should have been printed above
-  //insert something here that can revert it back to its previous state somehow mabe save a temporary copy of everything and put it here
-  CenterString("market is corrupted :'c"); //specific error messages should have been printed above
-  return false;
-  //  **MESSAGE ABOUT PONENTIAL FLAW**
-  //returns weather the transaction was sucsessfull or not. although if it is not sucsessfull
-  //here, i have a much greater issue that just the player or the market not having the right values.
-  //if anny of these functions fails to update the information in the file that means there potential incontinuity
-  //whithin the market/player data. leading to a potential vector of an explit to gain free money or material, or loose it with no cause...
-  //this really should return more than just false, mabe some sort of exeption or something that would automatically disable the plugin...another mouthfull, great
+  return false; // i guess if quantity isnt numeric...im just doing this because the compiler yelled at me
 }
 
 //print money for emralds
-bool printCash(int UUID, int quantity){
-  player playerData = retrievePlayer(UUID);
-  market marketToday = retrieveMarketToday();
+void printCash(market &marketToday, player &playerData, int quantity){
   float priceOfDiamonds = marketToday.thing[20].salePrice; // = the current price of diamonds
-  int sourceItems = getQuantityFromInv(unhashInv(playerData.inventoryHash),21); //number of emralds player has
-  int minnedToday = playerData.quantityMined; //retrieve from player
+  int sourceItems = getQuantityFromInv(unhashInv(playerData.inventoryHash),IDofEmranlds); //number of emralds player has
+  int minnedToday = playerData.quantityPrinted; //retrieve from player
 
   if(sourceItems < quantity){
-    CenterString("not enough Emralds");
-    CenterString("processing all remaining items");
     quantity = sourceItems;
   }
   if(1000 < minnedToday + quantity){ //limmit player to exchanging 1000 per day
-    CenterString("Reached limmit for printing for today");
-    CenterString("processing all remaining items");
     quantity = 1000 - minnedToday;
   }
   if(quantity <= 0){ //if quantity reaches 0 Transaction iss nullified and failed technically i dont have to return but i do to increace effiecency (i almost forgot quantity can go negitive here)
-    CenterString("Transaction Failed returning");
-    return false;
-    //
+    return;
   }
 
   //Proceed to printing!
-  marketToday.ballance += quantity * priceOfDiamonds * .8; //market gets 80% of the cut
-  playerData.cashBallance += quantity * priceOfDiamonds * .2; //player gets 20% of the cut
+  marketToday.ballance += quantity * (priceOfDiamonds * .8); //market gets 80% of the cut
+  playerData.cashBallance += quantity * (priceOfDiamonds * .2); //player gets 20% of the cut
   marketToday.thing[IDofEmranlds].stock += quantity; //market -hords- aquires emralds x3...
-  playerData.quantityMined += quantity;
+  playerData.quantityPrinted += quantity;
 
   //void addToInventory(player &playerData, int ID, int &quantity) for reference
   quantity = -quantity; //change to negitive because the quantity is being taken away from player
   addToInventory(playerData.inventoryHash,IDofEmranlds,quantity); //value should go down also no need to make sure inventory runs out because alreaddy checked for that
 
   //save to logs
-  if((updatePlayer(playerData)) && (updateMarketToday(marketToday)))
-  return true;
-  else {
-    CenterString("ERROR! : something went wrong look up^..."); //specific error messages should have been printed above
-    //insert something here that can revert it back to its previous state somehow mabe save a temporary copy of everything and put it here but then how would i revert it...the filesystem is whats failing /shrug
-    CenterString("market is corrupted :'c"); //specific error messages should have been printed above
-    return false;
-    // PLEASE READ **MESSAGE ABOUT PONENTIAL FLAW** FROM processItemTransaction(), IT IS ALSO RELIVANT HERE
-  }
-  return true;
+  // updateMarketToday(marketToday);
 }
 
 //exchange cash for credit not the other way around
-bool exchangeChash(int UUID, float amount){
-  player playerData = retrievePlayer(UUID);
-  market marketToday = retrieveMarketToday();
+void exchangeChash(market &marketToday, player &playerData, float amount){
 
   float priceOfDiamonds = marketToday.thing[20].salePrice; // = the current price of diamonds
   float sourceBallance = playerData.cashBallance;
 
   if(sourceBallance < amount){
-    CenterString("not enough Cash");
-    CenterString("processing what can be afforded");
     amount = sourceBallance;
   }
   if(amount == 0){ //if amount reaches 0 Transaction iss nullified and failed technically i dont have to return but i do to increace effiecency
-    CenterString("Transaction Failed returning");
-    return false;
+    return;
   }
 
   //proceed with exchange
-  marketToday.ballance +=amount;
-  playerData.cashBallance -= amount * (200 / priceOfDiamonds);
+  marketToday.ballance += amount;
+  playerData.cashBallance -= amount;
+  playerData.creditBallance += amount * (200 / priceOfDiamonds);
 
   //save to logs
-  if((updatePlayer(playerData)) && (updateMarketToday(marketToday))){
-    return true;
-  }
-  else {
-    CenterString("ERROR! : something went wrong look up^..."); //specific error messages should have been printed above
-    //insert something here that can revert it back to its previous state somehow mabe save a temporary copy of everything and put it here but then how would i revert it...the filesystem is whats failing /shrug
-    CenterString("market is corrupted :'c"); //specific error messages should have been printed above
-    return false;
-    // PLEASE READ **MESSAGE ABOUT PONENTIAL FLAW** FROM processItemTransaction(), IT IS ALSO RELIVANT HERE
-  }
-  //sucsess
-  return true;
+  // updateMarketToday(marketToday);
 }
 
 //exchange credit for amo (idk about this one, i might leave amo out compleatly. this is too complicated for me)
-bool makeAmo(int UUID, int quantity){
-  player playerData = retrievePlayer(UUID);
-  market marketToday = retrieveMarketToday();
+void makeAmo(market &marketToday, player &playerData, int quantity){
 
   float price = 0; // price of amunition....??? change this
   float sourceBallance = playerData.creditBallance;
   float priceOfDiamonds = marketToday.thing[20].salePrice; //the current price of diamonds in case i need it
 
   if(sourceBallance < quantity * price){
-    CenterString("not enough Credit");
-    CenterString("processing what can be afforded");
     quantity = sourceBallance / price; // dont worry this would neer execute if price was 0 because of the prier condition 0 is not less than 0, and the source ballance could never go negitive
   }
   if(quantity == 0){ //if quantity reaches 0 Transaction is nullified and failed technically i dont have to return but i do to increace effiecency
-    CenterString("Transaction Failed returning");
-    return false;
+    return;
   }
 
   //proceed with exchange
@@ -1245,19 +1375,6 @@ bool makeAmo(int UUID, int quantity){
 
   //void addToInventory(player &playerData, int ID, int &quantity) for reference
   addToInventory(playerData.inventoryHash,idofammo,quantity); //value should go up
-
-  //save to logs
-  if(updatePlayer(playerData)){
-    return true;
-  }
-  else {
-    CenterString("ERROR! : something went wrong look up^..."); //specific error messages should have been printed above
-    //no chance of corruption here it either happens of it does not
-    return false;
-    // since the only thing being affected here is player data, if it fails to change, then nothing changed and there is no risk of incontinuity
-  }
-  //sucsess
-  return true;
 }
 
 //returns stack limmit for item (probably should be in a config)
@@ -1266,40 +1383,35 @@ int stackLimmit(int ID){
   return table[ID];
 }
 
-//directly enter data to slot
-void editSlot(int &slotID, int &slotAmt, int &quantity, int ID){
-  //initial assignment
-  slotID = ID;
-  slotAmt = quantity;
-  if(slotAmt > stackLimmit(slotID)) //prevent overflow
-  slotAmt = stackLimmit(slotID);
-  if(slotID == 0) //if its air, you can not have more air
-  slotAmt = 0;
+//verifys the slot parameters and ajdusts quantity if needed, returns false if the slot
+bool verifySlot(int &slotID, int &slotQTY, int &quantity, int ID){
+  if(slotQTY > stackLimmit(slotID)){ //prevent overflow
+    quantity = slotQTY - stackLimmit(slotID); //take back the overflow
+    slotQTY = stackLimmit(slotID);
+    return false;
+  }
+  //if slot becomes empty, make it empty
+  //and it its air, you can not have more air
+  if(slotQTY <= 0 || slotID == 0){
+    quantity = slotQTY; //take back the difference if the slot goes negitive
+    slotID = 0;
+    slotQTY = 0;
+  }
+  return true;
 }
 
 //adds the quantity to the slot that that fits
-bool addToSlot(int &slotID, int &slotAmt, int &quantity, int ID){
-  // (((quantity > 0) && !(slotAmt > stackLimmit(ID)) && (slotID == ID)) || ((quantity < 0) && !(slotAmt < 0) && (slotID == ID)))
+bool addToSlot(int &slotID, int &slotQTY, int &quantity, int ID){
+  // (((quantity > 0) && !(slotQTY > stackLimmit(ID)) && ((slotID == ID) || (slotQTY <= 0))) || ((quantity < 0) && !(slotQTY < 0) && (slotID == ID)))
   // this might be a tough one to explain ughhh hmmm on mabe if i can break this down it will be easyer...
-  bool removing = (quantity < 0) , adding = (quantity > 0), empty = (slotAmt <= 0), full = (slotAmt >= stackLimmit(ID)), matches = (slotID == ID);
+  bool removing = (quantity < 0) , adding = (quantity > 0), empty = (slotQTY <= 0), full = (slotQTY >= stackLimmit(ID)), matches = (slotID == ID);
   //mabe this is a bit easyer to read
-  if((adding && !full && matches) || (removing && !empty && matches)){ //thats better :D
-    slotAmt += quantity;
+  if((adding && !full && (empty || matches)) || (removing && !empty && matches)){ //thats better :D
+    //initial assignment
+    slotID = ID;
+    slotQTY += quantity;
     quantity = 0;
-    //need to reastablish the full and empty variables after adding initial difference
-    // keeping the slot within its bounds, it can not overflow or be in a defisit however you spell that
-    full = (slotAmt >= stackLimmit(ID));
-    empty = (slotAmt <= 0);
-    if(full){                             //if the slot overflows...
-      quantity = slotAmt - stackLimmit(ID); // take back the difference
-      slotAmt = stackLimmit(ID);          // set it back to the limmit
-    }
-    else if(empty){     // if the slot is not in overflow it might be in defisit...
-      quantity = slotAmt; // because quantity is 0 i can assign quantity the difference
-      slotAmt = 0;      // then reset the slot back to 0
-      slotID = 0;       // and clear its item ID tag
-    }
-    return true;
+    return verifySlot(slotID,slotQTY,quantity,ID);
   }
   return false;
 }
@@ -1307,7 +1419,7 @@ bool addToSlot(int &slotID, int &slotAmt, int &quantity, int ID){
 //edits the player inventory to add or remove items from it
 void addToInventory(InvHash &inventoryHash, int ID, int &quantity){
   if(quantity != 0){ //skip everything if the quantity is 0 (if the quantity is 0 why would i even call this function in the first place)
-    //unpack inventory from player
+    //unpack inventory from hash
     Inventory invData = unhashInv(inventoryHash);
     //for reference (whats inside Inventory)
     // int item[y][x][z]; //item [slot y][slot x][id,quantity]
@@ -1316,31 +1428,33 @@ void addToInventory(InvHash &inventoryHash, int ID, int &quantity){
       for(int i = 0; i < 3; i++){
         //unpack the slot
         int slotID = invData.item[i][j][0];
-        int slotAmt = invData.item[i][j][1];
-        addToSlot(slotID,slotAmt,quantity,ID);
-        displayInventory(invData,i,j); //im so happy i was smart eough to pass invdata to this function imagin unpacking, repacking and then unpacking again, that would he horrible
+        int slotQTY = invData.item[i][j][1];
+        addToSlot(slotID,slotQTY,quantity,ID);
+        // displayInventory(invData,i,j); //im so happy i was smart eough to pass invdata to this function imagin unpacking, repacking and then unpacking again, that would he horrible
         //repack the slot
         invData.item[i][j][0] = slotID;
-        invData.item[i][j][1] = slotAmt;
+        invData.item[i][j][1] = slotQTY;
         if(quantity == 0){
+          //repack inventory back into hash
+          inventoryHash = hashInv(invData);
           return;
         }
       }
       //Hotbar
       //unpack the slot
       int slotID = invData.hotbar[j][0];
-      int slotAmt = invData.hotbar[j][1];
-      addToSlot(slotID,slotAmt,quantity,ID);
-      displayInventory(invData,-1,j);
+      int slotQTY = invData.hotbar[j][1];
+      addToSlot(slotID,slotQTY,quantity,ID);
+      // displayInventory(invData,-1,j);
       //repack the slot
       invData.hotbar[j][0] = slotID;
-      invData.hotbar[j][1] = slotAmt;
+      invData.hotbar[j][1] = slotQTY;
       if(quantity == 0){
+        //repack inventory back into hash
+        inventoryHash = hashInv(invData);
         return;
       }
     }
-    //repack inventory back into player
-    inventoryHash = hashInv(invData);
   }
 }
 
@@ -1391,11 +1505,13 @@ item createItem(int id){
     float basePrice = configTable.priceBase[id];
     item.salePrice = basePrice + (basePrice * noise); //only store the sale price because the buy price is based on sell salePrice
     item.stock = 0;
+    item.quantityChange = 0;
   }
   else{
     item.salePrice = -1;
     item.noise = 0;
     item.stock = -1;
+    item.quantityChange = 0;
   }
   return item;
 }
@@ -1419,7 +1535,7 @@ string lookupItem(int id){
 
 //returns the name of the item
 bool blackList(int id){
-  bool table[numberOfItems] = {1,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0};
+  bool table[numberOfItems] = {1,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1};
   return table[id];
 }
 
@@ -1432,7 +1548,7 @@ int priceBase(int id){
 //generates new player with givven UUID or random one if givver -1
 player generatePlayer(int UUID){
   player playerData;
-  if(UUID == -1) playerData.UUID = generateUUID();
+  if(UUID == 0) playerData.UUID = generateUUID();
   else playerData.UUID = UUID;
   string name = lookupItem(rand() % numberOfItems);
   bool reachedEnd = false;
@@ -1454,7 +1570,7 @@ player generatePlayer(int UUID){
   playerData.inventoryHash = hashTag;
   playerData.cashBallance = rand() % 1000;
   playerData.creditBallance = rand() % 4000;
-  playerData.quantityMined = rand() % 200;
+  playerData.quantityPrinted = 0;
   updatePlayer(playerData);
   return playerData;
 }
@@ -1474,9 +1590,6 @@ Inventory generateInventory(){
           inventoryData.item[i][j][0] = rand() % numberOfItems; //id
         }while(configTable.blackList[inventoryData.item[i][j][0]]); //make sure item is not black listed
         inventoryData.item[i][j][1] = rand() % 50; //quantity
-        cout << string(100,'\n');
-        displayInventory(inventoryData,i,j);
-        sleep(100);
       }
       else{
         inventoryData.item[i][j][0] = 0;
@@ -1488,9 +1601,6 @@ Inventory generateInventory(){
         inventoryData.hotbar[j][0] = rand() % numberOfItems; //id
       }while(configTable.blackList[inventoryData.hotbar[j][0]]); //make sure item is not black listed
       inventoryData.hotbar[j][1] = rand() % 50; //quantity
-      cout << string(100,'\n');
-      displayInventory(inventoryData,-1,j);
-      sleep(100);
     }
     else{
       inventoryData.hotbar[j][0] = 0;
@@ -1506,111 +1616,162 @@ int generateUUID(){
   int index = 0;
   int UUID = rand() % 1000 + 1; //reserve 0 for null player
   //CREATE OBJECTS AND READ FIRST PLAYER
-  fstream readStream;
-  readStream.open ("player.bin", ios::binary | ios::in);
-  readStream.read(reinterpret_cast <char *> (&player), sizeof(player));
+  fstream readstream;
+  readstream.open ("player.bin", ios::binary | ios::in);
+  readstream.read(reinterpret_cast <char *> (&player), sizeof(player));
   do{
     index++; //increment index
-    readStream.seekg(index * sizeof(player), ios::beg); //GO TO NEXT PLAYER
-    readStream.read(reinterpret_cast <char *> (&player), sizeof(player)); //READ NEXT PLAYER
+    readstream.seekg(index * sizeof(player), ios::beg); //GO TO NEXT PLAYER
+    readstream.read(reinterpret_cast <char *> (&player), sizeof(player)); //READ NEXT PLAYER
     if(player.UUID == UUID){ //CHECK PLAYER
       UUID = generateUUID(); //hmmmm RECURSION TO THE RESCUE!
     }
-  }while(!readStream.fail()); //while not at end of file
-  readStream.close(); //close file
+  }while(!readstream.fail()); //while not at end of file
+  readstream.close(); //close file
   //print results
   return UUID;
 }
 
 //retrieve player information out of player database and player ballance log
-player retrievePlayer(int UUID){
+player retrievePlayer(int UUID, int index){
   // Create our objects.
   player player;
-  int index = 0;
-  fstream filestream;
-  filestream.open ("player.bin", ios::binary | ios::in); //attempt to open file
-  filestream.read(reinterpret_cast <char *> (&player), sizeof(player)); //read first struct
-  if(filestream.fail()){ //check if empty
-    filestream.clear();
-    //create file if there is no file
-    fstream create;
-    create.open("player.bin", ios::binary | ios::in);
+  int count;
+
+  //get number of players
+  fstream countstream;
+  count = 0;
+  countstream.open ("player.bin", ios::binary | ios::in);
+  if(countstream.is_open()){
+    countstream.seekg(0, ios::end);
+    count = countstream.tellg()/sizeof(player); //retuns number of players in file
   }
-  else{
-    do{
-      if(player.UUID == UUID){
-        filestream.close();  //close file
-        return player;
+  countstream.close();
+
+  if(UUID == 0){ // if null player is passed get a specifically indexed player (for loading arrays of players for mass operations)
+    if(index < count){ //only try to read an indexed player if the index is valid, meaning not outside the file limmits
+      //open readstream
+      fstream readstream;
+      readstream.open ("player.bin", ios::binary | ios::in); //attempt to open file
+      if(readstream.is_open()){ //if the file opened
+        readstream.seekg(index * sizeof(player), ios::beg); //go directly to chosen player like a boss
+        readstream.read(reinterpret_cast <char *> (&player), sizeof(player)); //read struct
+        if(!readstream.fail()){ //only return if read did not fail
+          readstream.close();  //close file stream
+          return player; //return the player object
+        }
       }
-      index++; //set index for next struct
-      filestream.seekg(index * sizeof(player), ios::beg); //go to next struct
-      filestream.read(reinterpret_cast <char *> (&player), sizeof(player)); //read struct
-    }while(!filestream.fail());
-    if(UUID == -1){
-      filestream.seekg((rand() % index) * sizeof(player), ios::beg);
-      filestream.read(reinterpret_cast <char *> (&player), sizeof(player));
-      filestream.close();  //close file
-      return player;
+    }
+    // UUID = generateUUID();  <- not sure to do this or not here
+    // if controll reaches this point that means the uuid was 0,
+    // and an attempt was made to index a specific player but failed
+    // so not to return a null player generate a random UUID and create a new players
+    // with the random UUID, but ill be honest, the only time this would execute
+    // is when debugging, so not like this would mess with anythinhg by creating random players
+    // at least it shoudnt... i hope, there is no reason to index players like this unless im batch grabbing
+    // a lot of persistant players to do group operations like simulations... mabe i should return null players, idk
+  }
+  else{ //get the specific player
+    fstream readstream;
+    readstream.open ("player.bin", ios::binary | ios::in); //attempt to open file
+    if(readstream.is_open()){ //if the file opened
+      for (int i = 0; i < count; i++){ //for loop because i know the count
+        readstream.seekg(i * sizeof(player), ios::beg); //go to next struct
+        readstream.read(reinterpret_cast <char *> (&player), sizeof(player)); //read struct
+        if(player.UUID == UUID){ //if the player uuid matches
+          readstream.close();  //close file
+          return player; //return the player object
+        }
+      }
+      readstream.close();  //close file stream if its open
     }
   }
 
+  // im not sure if this should should be generate or create... ill do create and pass the UUID to it. i guess that seams right
   //if file could not be opened make one
-  filestream.close();  //close file
-  return generatePlayer(UUID);
+  //basically if annything failed, weather because the index was too high, player was not there
+  return createPlayer(UUID);
 }
 
 //updates player information in the player database
-bool updatePlayer(player data){
+bool updatePlayer(player playerData){
+  fstream readstream;
+  readstream.open ("player.bin", ios::binary | ios::in | ios::app); //attempt to open file, and in app mode to make it if its not there
+  if(readstream.is_open()){ //if the file opened
+    fstream countstream;
+    int count = 0;
+    countstream.open ("player.bin", ios::binary | ios::in);
+    if(countstream.is_open()){
+      countstream.seekg(0, ios::end); //set position to end
+      count = countstream.tellg()/sizeof(player);
+      //retuns number of players in file by getting
+      //the index of the position and dividing it by the size of each player
+      //no loops required :D
+    }
+    countstream.close();
 
-  // Create our objects.
-  player tempPlayer;
-  fstream readStream;
-
-  readStream.open ("player.bin", ios::binary | ios::in); //open in input mode
-  int index = 0; //set counter
-  while(!readStream.fail()){ //check if read failed
-    readStream.read(reinterpret_cast <char *> (&tempPlayer), sizeof(tempPlayer)); //read first player
-
-    if(tempPlayer.UUID == data.UUID){ //check if match
-      CenterString("yes");
-      fstream WriteStream;
-      WriteStream.open ("player.bin", ios::binary | ios::out); //open in output mode
-      WriteStream.seekg(index * sizeof(player), ios::beg); //set position for write to next position
-      WriteStream.write(reinterpret_cast <char *> (&data), sizeof(player)); //overwrite data
-      WriteStream.close();
-      if(WriteStream.fail()){ //check if write failed
-        return false;
-      }
-      else{
-        return true;
+    player playerTable[count];
+    fstream readstream;
+    readstream.open ("player.bin", ios::binary | ios::in);
+    //build table and check table then modify if found
+    bool found = false;
+    for(int i = 0; i < count; i++){
+      readstream.seekg(i * sizeof(player), ios::beg); //set position to end
+      readstream.read(reinterpret_cast <char *> (&playerTable[i]),sizeof(player));
+      if(playerTable[i].UUID == playerData.UUID){
+        found = true;
+        playerTable[i] = playerData;
       }
     }
-    index++; //increment counter
-    readStream.seekg(index * sizeof(player), ios::beg);  //set position for read to next position
-    readStream.read(reinterpret_cast <char *> (&tempPlayer), sizeof(player)); //read nex player
-  }
+    readstream.close();  //close file stream if its open no more reads
 
-  fstream appendStream;
-  appendStream.open ("player.bin", ios::binary | ios::out | ios::app); //open in input mode
-  appendStream.write(reinterpret_cast <char *> (&data), sizeof(player));
-  if(appendStream.fail()){ //check if write failed
-    return false;
+    if(!found){ //if player is not found the index will not be at the end of the file so move it forward one
+      // Create our objects.
+      fstream appendstream;
+      appendstream.open ("player.bin", ios::binary | ios::out | ios::app); //attempt to open file
+      if(appendstream.is_open()){
+        appendstream.write(reinterpret_cast <char *> (&playerData), sizeof(player)); //write struct
+        appendstream.close();  //close file stream if its open
+        if(!appendstream.fail()){
+          return true;
+        }
+        else{
+          return false;
+        }
+      }
+    }
+    else{
+      // Create our objects.
+      fstream writestream;
+      writestream.open ("player.bin", ios::binary | ios::out); // << this line deletes everything in the file
+      if(writestream.is_open()){
+        for(int i = 0; i < count; i++){
+          writestream.seekg(i * sizeof(player), ios::beg); //set position to index
+          writestream.write(reinterpret_cast <char *> (&playerTable[i]),sizeof(player));
+        }
+        writestream.close();
+        if(!writestream.fail()){
+          return true;
+        }
+        else{
+          return false;
+        }
+      }
+    }
   }
-  else{
-    return true;
-  }
+  return false;
 }
 
 void displayPlayerLog(int verbosity){
   // Create our objects.
   player temp;
-  fstream readStream;
+  fstream readstream;
   int index = 0;
-  readStream.open ("player.bin", ios::binary | ios::in);
-  readStream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
+  readstream.open ("player.bin", ios::binary | ios::in);
+  readstream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
   printLine('-');
   LeftString(returnPlayerHeadder());
-  while(!readStream.fail()){
+  while(!readstream.fail()){
     printLine('-');
     if(verbosity >= 1){
       LeftString(returnPlayerData(temp));
@@ -1620,46 +1781,58 @@ void displayPlayerLog(int verbosity){
     }
     //display
     index++; //increment index
-    readStream.seekg(index * sizeof(temp), ios::beg); //GO TO NEXT PLAYER
-    readStream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
+    readstream.seekg(index * sizeof(temp), ios::beg); //GO TO NEXT PLAYER
+    readstream.read(reinterpret_cast <char *> (&temp), sizeof(temp));
   }
-  readStream.close();
+  readstream.close();
 }
 
-
-//purges mining information in player log
+//purges mining information in player log hopfully this wont create huge 500MB player files for no reason like the last version did
 bool purgeMining(){
   // Create our objects.
-  player playerData;
-  int index = 0;
-  fstream filestream;
-  //attempt to open file and then read first player
-  filestream.open ("player.bin", ios::binary | ios::in | ios::out);
-  filestream.read(reinterpret_cast <char *> (&playerData), sizeof(playerData)); //fread first struct
-  //if failed to open
-  if(filestream.fail()){
-    //create file if there is no file
-    fstream create;
-    create.open("player.bin", ios:: binary | ios::in | ios::out);
+  fstream countstream;
+  int count = 0;
+  countstream.open ("player.bin", ios::binary | ios::in);
+  if(countstream.is_open()){
+    countstream.seekg(0, ios::end); //set position to end
+    count = countstream.tellg()/sizeof(player);
+    //retuns number of players in file by getting
+    //the index of the position and dividing it by the size of each player
+    //no loops required :D
   }
-  else{
-    do{
-      playerData.quantityMined = 0;
-      filestream.write(reinterpret_cast <char *> (&playerData), sizeof(playerData));
-      index++; //set index for next struct
-      filestream.seekg(index * sizeof(playerData), ios::beg); //go to next struct
-      filestream.read(reinterpret_cast <char *> (&playerData), sizeof(playerData));
-    }while(!filestream.fail());
-    //if player is not in list append it to end of list (if thread reached here seekg alreaddy pushed the position to end of file so its safe to just write from here)
+  countstream.close();
+
+  fstream readstream;
+  readstream.open ("player.bin", ios::binary | ios::in | ios::app); //attempt to open file, and in app mode to make it if its not there
+  if(readstream.is_open()){ //if the file opened
+    player playerTable[count];
+    fstream readstream;
+    readstream.open ("player.bin", ios::binary | ios::in);
+    //build table and check table then modify if found
+    for(int i = 0; i < count; i++){
+      readstream.seekg(i * sizeof(player), ios::beg); //set position to end
+      readstream.read(reinterpret_cast <char *> (&playerTable[i]),sizeof(player));
+      playerTable[i].quantityPrinted = 0; //all of this just for this one line
+    }
+    readstream.close();  //close file stream if its open no more reads
+    // Create our objects.
+    fstream writestream;
+    writestream.open ("player.bin", ios::binary | ios::out); // << this line deletes everything in the file
+    if(writestream.is_open()){
+      for(int i = 0; i < count; i++){
+        writestream.seekg(i * sizeof(player), ios::beg); //set position to index
+        writestream.write(reinterpret_cast <char *> (&playerTable[i]),sizeof(player));
+      }
+      writestream.close();
+      if(!writestream.fail()){
+        return true;
+      }
+      else{
+        return false;
+      }
+    }
   }
-  filestream.write(reinterpret_cast <char *> (&playerData), sizeof(playerData));
-  if(filestream.fail()){
-    //create file if there is no file
-    filestream.close();
-    return false;
-  }
-  filestream.close();
-  return true;
+  return false;
 }
 
 //retrieve market object from market log
@@ -1678,8 +1851,8 @@ market retrieveMarketToday(){
   }
 
   //if file could not be opened make one
-  printLong("Merket log could not be found generating new market with random data");
-  return generateMarket();
+  printLong("Merket log could not be found returning blank market");
+  return createMarket();
 }
 
 //updates market today
@@ -1713,7 +1886,7 @@ bool logMarket(market data){
 }
 
 // ill probably make this into its own function later then
-void displayMarketGraph(int ID){
+void displayMarketGraph(int ID, int length){
   // Create our objects.
   fstream countstream;
   int count = 0;
@@ -1724,31 +1897,35 @@ void displayMarketGraph(int ID){
   }
   countstream.close();
 
-  //display length
-  int length = count;
+  if(count == 0){
+    CenterString("there in no market log");
+    return;
+  }
 
-  //limmit table display
-  if(length > display_Width){
-    length = display_Width;
+  //if there is not enough log enteies to satisfy the argument, restrict the graph to the amount there is
+  if(length > count){
+    length = count;
   }
 
   //declare table object
   float valueTable[length];
 
   //build table of the last length market items
-  fstream readStream;
-  readStream.open ("market.bin", ios::binary | ios::in);
-  if(readStream.is_open()){
+  fstream readstream;
+  readstream.open ("market.bin", ios::binary | ios::in);
+  if(readstream.is_open()){
     int ArrayIndex = 0;
-    for(int i = count - length; i < count; i++){
+    for(int i = count - 1; i >=  count - length; i--){
       market temp;
-      readStream.seekg(i * sizeof(market), ios::beg);
-      readStream.read(reinterpret_cast <char *> (&temp), sizeof(market));
-      if(!readStream.fail()){
-        if(ID != -1)
-        valueTable[ArrayIndex] = temp.thing[ID].salePrice;
-        else
-        valueTable[ArrayIndex] = temp.ballance;
+      readstream.seekg(i * sizeof(market), ios::beg);
+      readstream.read(reinterpret_cast <char *> (&temp), sizeof(market));
+      if(!readstream.fail()){
+        if(ID != -1){
+          valueTable[ArrayIndex] = temp.thing[ID].salePrice;
+        }
+        else{
+          valueTable[ArrayIndex] = temp.ballance;
+        }
       }
       else{
         valueTable[ArrayIndex] = 0; //if for whatever reaon there is read error, 0
@@ -1756,60 +1933,133 @@ void displayMarketGraph(int ID){
       ArrayIndex++;
     }
   }
-  readStream.close();
+  readstream.close();
+  //display the graph :D
+  displayGraph(valueTable,length);
+}
 
-  //get its limits
-  float value,base,cealing;
-  //set limmits to the first value
-  value = base = cealing = valueTable[0];
-  //run though table getting the gighest and lowest value
-  for(int i = 0; i < length; i++){
-    value = valueTable[i];
-    if(base > value){
-      base = value;
-    }
-    if(cealing < value){
-      cealing = value;
-    }
+void displayGraph(float data[], int length){
+  // constants
+  const int gridWidth = 5, gridHeight = 5, height = 21; //height of the output graph
+
+  //domain restriction
+  if(length > display_Width - 12)
+  length = display_Width - 12; //if the length is too long limmit it
+
+  //get the limmits and a copy of the data with the search domain of length
+  float cealing = *max_element(data,data+length);
+  float base = *min_element(data,data+length);
+
+  //if the limmits are the same the graph is imposible, print the single value and return
+  if(base == cealing){
+    //therefore cealing = celing2 not that i needed to know that or anything
+    cout << base;
+    return;
   }
-
-  //expand limmits to prevent crash when limish are equal because -nan
-  cealing++;
-  base--;
-
-  cealing -= base;
-  int size = 10;
-  string grid[length];
-  for(int i = 0; i < length; i++){
-    valueTable[i] -= base;
-    valueTable[i] /= cealing;
-    string block;
-    block.append(string(size - ceil(valueTable[i] * size ),' '));
-    block.push_back('#');
-    block.append(string(ceil(valueTable[i] * size ),'-'));
-    grid[i] = block;
+  //if the limmits are the same the graph is imposible, print the single value and return
+  if(base == cealing){
+    // CenterString(String_2Decimals(to_string(base)));
+    return;
   }
+  //dsiaplay grid sideways with grid lines and axis markers
+  for(int j = height - 1; j >= 0; j--){
+    //index
+    float index = ((j * ((cealing - base)/(height - 1))) + base);
 
-  //turn grid sideways and dsiplay it character by character
-  for(int j = 0; j < size + 1; j++){
+    //if function crosses 0 on an integer j value
+    bool zero = (index == 0);
+
+    //do this here since i dont need i for these
+    //falls on an extents
+    bool top = (j == height - 1);
+    bool bottom = (j == 0);
+    //if falls on a gridline
+    bool horizontal = (j % gridHeight == 0);
+
+    //y axis
     string outstring;
-    for(int i = 0; i < length; i++){
-      outstring.push_back(grid[i][j]);
+    //conditions where the index should be shown
+    if (top || bottom || horizontal || zero)
+    outstring.append(bindCenter(String_2Decimals(to_string(index)),10));
+    else
+    outstring.append(string(10,' '));
+
+    //each line
+    for(int i = length - 1; i >= 0; i--){
+      int range = (data[i] - base) / (cealing - base) * height; // -1 because the for loop runs through the index numbers of 0 - height -1
+      if(j == range) //graph plot
+      outstring.push_back('*');
+      else{ //grid lines
+        //terms
+
+        //falls on an extents
+        bool leftSide = (i == length - 1);
+        bool right = (i == 0);
+
+        //if falls on a gridline
+        bool virtical = (i % gridWidth == 0);
+
+        //grid lines and magor axis
+        //major axis
+        if (right)
+        outstring.push_back('I');
+        else if(zero) //compare the index because j will always be 0 on the bottom but the index could be 0 anywhere
+        outstring.push_back('=');
+
+        //grid intersections
+        else if((top || horizontal || bottom) && (leftSide || virtical))
+        outstring.push_back('+');
+
+        //grid lines
+
+        //virtical lines
+        else if((leftSide || virtical) && (j % 2 == 0)) //for every other j for dashed lines
+        outstring.push_back('|');
+
+        //horizontal lines
+        else if((top || horizontal || bottom) && (i % 2 == 0)) //for every other i for dashed lines
+        outstring.push_back('-');
+
+        //nothing
+        else
+        outstring.push_back(' ');
+      }
+
     }
-    CenterString(outstring);
+    RightString(outstring);
   }
+  //x axis
+  string outstring;
+  outstring.append(string(10,' '));
+  for(int i = length - 1; i >= 0; i--){
+    //terms
+    //falls on an extents
+    bool leftSide = (i == length - 1);
+    //if falls on a gridline
+    bool virtical = (i % gridWidth == 0);
+    //output block
+    string block;
+    if(virtical || leftSide)
+    block.append(to_string(-i));
+    else
+    block.push_back(' ');
+    //append block to outstring
+    outstring.append(block);
+    i -= (block.length() - 1); //skip the spaces taken up by block
+  }
+  RightString(outstring);
 }
 
 // -2 for just the ballance, -1 for full log, and some number for that item
 void displayMarketLog(int ID){
   // Create our objects.
   market temp;
-  fstream readStream;
+  fstream readstream;
   int index = 0;
-  readStream.open ("market.bin", ios::binary | ios::in);
+  readstream.open ("market.bin", ios::binary | ios::in);
   if(ID >= 0) displayMarketHeadder();
-  readStream.read(reinterpret_cast <char *> (&temp), sizeof(market));
-  while(!readStream.fail()){
+  readstream.read(reinterpret_cast <char *> (&temp), sizeof(market));
+  while(!readstream.fail()){
     if(ID >= 0) LeftString(getItemData(temp.thing[ID],-1,-1,-1));
     else if(ID == -1){
       LeftString(build("Day :",index + 1,build(" market ballance :",temp.ballance," cash"))); //probably one of the coolest lines ive ever written i didnt know build was so awesome
@@ -1820,10 +2070,10 @@ void displayMarketLog(int ID){
     }
     //display
     index++; //increment index
-    readStream.seekg(index * sizeof(market), ios::beg); //GO TO NEXT Market log entery
-    readStream.read(reinterpret_cast <char *> (&temp), sizeof(market));
+    readstream.seekg(index * sizeof(market), ios::beg); //GO TO NEXT Market log entery
+    readstream.read(reinterpret_cast <char *> (&temp), sizeof(market));
   }
-  readStream.close();
+  readstream.close();
 }
 
 //fetching data from retrieved file data functions
@@ -1843,8 +2093,6 @@ int getQuantityFromInv(Inventory inventoryData, int ID){
 }
 
 //Display FUNCTIONS
-
-
 
 void displayMarketHeadder(){
   printLine('-');
@@ -2018,7 +2266,7 @@ string returnPlayerData(player playerData){
   returnstring.append(" $");
   returnstring.append(bindRight(String_2Decimals(to_string(playerData.creditBallance)),11));
   returnstring.append(" #");
-  returnstring.append(bindCenter(to_string(playerData.quantityMined),11));
+  returnstring.append(bindCenter(to_string(playerData.quantityPrinted),11));
   return(returnstring);
 }
 
@@ -2162,7 +2410,7 @@ void printMultiString(string strArray[],int sizeOfStrArray){
   unsigned int max = 0;
   for(unsigned int i = 0; i < sizeOfStrArray/sizeof(string); i++){
     if(strArray[i].length() > max){
-      max = strArray[i].length();
+      max = strArray[i].length() + 2; //binding area with extera space
     }
   }
   //if the array is too big
@@ -2178,10 +2426,7 @@ void printMultiString(string strArray[],int sizeOfStrArray){
     //print what fits
     string outString;
     for(int j = 0; j < quantityThatFits; j++){
-      outString.append("  ");
-      outString.append(strArray[j]);
-      outString.append(string(max - strArray[j].length(),' '));
-      outString.append("  ");
+      outString.append(bindLeft(strArray[j],max));
     }
     LeftString(outString);
     //truncate array for recurcive call
@@ -2197,10 +2442,7 @@ void printMultiString(string strArray[],int sizeOfStrArray){
   else{
     string outString;
     for(unsigned int j = 0; j < sizeOfStrArray/sizeof(string); j++){
-      outString.append("  ");
-      outString.append(strArray[j]);
-      outString.append(string(max - strArray[j].length(),' '));
-      outString.append("  ");
+      outString.append(bindLeft(strArray[j],max));
     }
     LeftString(outString);
   }
