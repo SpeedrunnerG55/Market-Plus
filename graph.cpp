@@ -10,11 +10,13 @@ using namespace std;
 
 void displayGraph(float data[], int length){
   // constants
-  const int gridWidth = 7, gridHeight = 5, height = 21; //height of the output graph
+  const int gridWidth = 5, gridHeight = 5, height = 40; //height of the output graph
+
+  length++; //include 0
 
   //domain restriction
-  if(length > display_Width - 12)
-  length = display_Width - 12; //if the length is too long limmit it
+  if(length > display_Width - 1)
+  length = display_Width - 1; //if the length is too long limmit it
 
   //get the limmits and a copy of the data with the search domain of length
   float cealing = *max_element(data,data+length);
@@ -28,32 +30,34 @@ void displayGraph(float data[], int length){
   }
 
   //allow user to expand window if needed
-  cout << "width " << display_Width << endl;
+  cout << "width " << length << endl;
   cout << "height " << height << endl;
   getchar();
 
   //dsiaplay grid sideways with grid lines and axis markers
-  for(int j = height - 1; j >= 0; j--){
+  for(int j = height; j >= 0; j--){
 
     //index
-    float index = ((j * ((cealing - base)/(height - 1))) + base);
+    float index = ((j * ((cealing - base)/(height))) + base);
 
     //if function crosses 0 on an integer j value
     bool zero = (index == 0);
 
     //do this here since i dont need i for these
     //falls on an extents
-    bool top = (j == height - 1);
+    bool top = (j == height);
     bool bottom = (j == 0);
     //if falls on a gridline
     bool horizontal = (j % gridHeight == 0);
 
     //y axis
     //conditions where the index should be shown
-    if (top || bottom || horizontal || zero)
-    cout << setw(10) << index;
+    if (top || bottom || horizontal || zero){
+      cout << setw(10) << index;
+      cout << ' ';
+    }
     else
-    cout << string(10,' ');
+    cout << string(11,' ');
 
     //each line
     for(int i = length - 1; i >= 0; i--){
@@ -99,11 +103,11 @@ void displayGraph(float data[], int length){
     cout << endl;
   }
   //x axis
-  cout << string(10,' ');
-  for(int i = length - 1; i >= 0; i--){
+  cout << string(11,' ');
+  for(int i = length -1; i >= 0; i--){
     //terms
     //falls on an extents
-    bool leftSide = (i == length - 1);
+    bool leftSide = (i == length -1);
     //if falls on a gridline
     bool virtical = (i % gridWidth == 0);
     string block;
@@ -128,7 +132,7 @@ int main(){
     data[i] = -i;
   }
 
-  displayGraph(data,200);
+  displayGraph(data,50);
 
   return 0;
 }

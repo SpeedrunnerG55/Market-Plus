@@ -37,9 +37,9 @@ add -std=c++11 as a compiler option in g++ or gcc
 //custom input function
 #define getInput(output,input) cout << "| " << output << " >"; cin>>input
 
-const int numberOfItems = 22; //represents the quantity of items that exist
-const int marketItems = 3; //represents the quantity of items that exist
-const int IDofEmranlds = 21;
+const int numberOfItems = 23; //represents the quantity of items that exist
+const int IDofEmranlds = 22;
+const int IDofDiamonds = 21;
 const int nameLength = 20;
 
 struct item {
@@ -62,8 +62,8 @@ struct InvHash{
 };
 
 struct Inventory{
-  int item[y][x][z]; //Inventory [slot y][slot x][id,quantity]
-  int hotbar[x][z]; //hotbar [slot x][id][quantity] (why did i include this? for continuity i guess)
+  int item[y][x][z]; //Inventory [slot y][slot x][ID,quantity]
+  int hotbar[x][z]; //hotbar [slot x][ID][quantity] (why did i include this? for continuity i guess)
 };
 
 //Hash FUNCTIONS
@@ -89,7 +89,7 @@ void printCash              (market &marketToday, player &playerData, int quanti
 void exchangeChash          (market &marketToday, player &playerData, float amount);         //exchange cash for credit not the other way around
 //edit sub group
 void addToInventory (InvHash &inventoryHash, int ID, int &quantity);    // edits the player inventory to add or remove items from it
-bool addToSlot      (int &slotID, int &slotQTY, int &quantity, int ID); // adds quantity of id to slot
+bool addToSlot      (int &slotID, int &slotQTY, int &quantity, int ID); // adds quantity of ID to slot
 bool verifySlot     (int &slotID, int &slotQTY, int &quantity, int ID); // verifys the slot parameters and ajdusts quantity if needed, returns false if the slot
 void editPrice      (float &price, float arg);                          // overwrite price for item
 int retrievePlayerUUID();                                               //text gui for a selection based player retriever
@@ -108,7 +108,7 @@ void displayMemory(player playerdata, market marketData); //displays a snapshot 
 // for market
 market generateMarket();   //generates random market information
 item generateItem(int ID); //generates random market information for specific item or random item if passed -1
-item createItem(int id);   //generates blank market information for specific item
+item createItem(int ID);   //generates blank market information for specific item
 
 // for player
 player generatePlayer(int UUID); //generates new player with givven UUID or random one if givver -1
@@ -120,7 +120,8 @@ using namespace std; // i keep on forgetting string is in the std namespace
 //  Display FUNCTIONS
 
 //for both (potentially)
-void displayGraph(float data[], int length); //displays the last length'th data  elements in an array as a graph
+const int logLength = 90;
+void displayGraph(float data[][logLength], int sets, char prefix[], int length); //displays the last length'th data  elements in an array as a graph
 
 // for market
 void displayMarketData  (market marketData, int selY, int selX); //displays market information on every item with a selector
@@ -141,7 +142,7 @@ void displayPlayerLog(int verbosity);         //1 for basic info 2 for basic inf
 // reference FUNCTIONS
 
 //probably wont need this one
-string lookupItem(int id); //returns the name of the item (will change to config file later...mabe)
+string lookupItem(int ID); //returns the name of the item (will change to config file later...mabe)
 //or this
 int stackLimmit  (int ID); //returns stack limmit for item (probably should be in a config)
 
@@ -153,8 +154,8 @@ struct config{
 config getConfig(); //attempt at config file indexer
 bool createConfig();//creates template config
 
-bool blackList(int id); //list of items illigal to buy or sell (will change to config file later)
-int priceBase (int id); //is base for price (will change to config file later)
+bool blackList(int ID); //list of items illigal to buy or sell (will change to config file later)
+int priceBase (int ID); //is base for price (will change to config file later)
 
 //  Filesystem FUNCTIONS
 
@@ -179,7 +180,7 @@ void sleep(int delay){
 #define getInput(output,input) cout << "| " << output << " >"; cin>>input
 
 //custom graphical functions (this could be a class probably)
-const int display_Width = 77;
+const int display_Width = 120;
 
 void printMultiString(string strArray[],int sizeOfStrArray);
 void printLong       (string longString);
@@ -189,6 +190,8 @@ void titleLine       (string str, char weight);
 void LeftString      (string str);
 void CenterString    (string str);
 void RightString     (string str);
+
+
 //formatting
 string shorten(char name[nameLength]); //removes trailing whitespace
 inline string build(string sA, float sB, string sC);
@@ -198,15 +201,69 @@ string bindRight(string arg, int length);
 string bindLeft(string arg, int length);
 string select(string arg,int selY, int selX, int posY, int posX);
 
-config configTable = getConfig();
+//returns the name of the item
+string lookupItem(int ID){
+  string table[numberOfItems] = {"Air","Stone","Grass","Dirt","Cobblestone","Planks","Sapling","Bedrock","flowing_water","still_water","flowing_lava","still_lava","sand","gravel","gold_ore","iron_ore","coal_ore","wood","leaves","sponge","glass","diamond","emrald"};
+  return table[ID];
+}
 
-string progress(int current, int total){
-  string bar;
-  bar.append("[");
-  bar.append(string(current + 1,'#'));
-  bar.append(string(total - (current + 1),' '));
-  bar.append("]");
-  return bar;
+//returns the name of the item
+bool blackList(int ID){
+  bool table[numberOfItems] = {1,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1};
+  return table[ID];
+}
+
+//is base for price (will change to config file later)
+int priceBase(int ID){
+  int table[numberOfItems] = {0,2,2,3,4,6,10,0,0,0,0,0,3,4,2,20,15,10,7,2,5,13,43};
+  return table[ID];
+}
+
+//tells how rare an item is (for simulation only)
+int rarityTable(int ID){
+  int table[numberOfItems] = {-1,50,10,70,30,20,10,-1,-1,-1,-1,-1,19,17,17,23,59,42,23,18,14,90,-1};
+  return table[ID];
+}
+
+bool createConfig(){
+  // Create our objects.
+  fstream writestream;
+  writestream.open ("file.cfg", ios::binary | ios::out | ios::trunc); //attempt to open file
+  if(!writestream.is_open()){ //check if empty
+    return false;
+  }
+  else{
+    config temp;
+    for(int i = 0; i < numberOfItems; i++){
+      //for reference
+      // bool blackList[numberOfItems];
+      // int priceBase[numberOfItems];
+      temp.blackList[i] = blackList(i); //lol
+      temp.priceBase[i] = priceBase(i); //lol
+    }
+    writestream.write(reinterpret_cast <char *> (&temp), sizeof(config));
+    writestream.close();  //close file
+    return true;
+  }
+}
+
+//attempt at config file indexer
+config getConfig(){
+  // Create our objects.
+  config temp;
+  fstream readstream;
+  readstream.open ("file.cfg", ios::binary | ios::in); //attempt to open file
+  if(!readstream.is_open()){ //check if empty
+    createConfig();
+    return getConfig();
+  }
+  else{
+    readstream.read(reinterpret_cast <char *> (&temp), sizeof(config));
+    readstream.close();  //close file
+    for(int i = 0; i < numberOfItems; i++){
+    }
+    return temp;
+  }
 }
 
 int main(){
@@ -247,47 +304,6 @@ int main(){
   CenterString("Bye!");
   printLine('#');
   return 0;
-}
-
-bool createConfig(){
-  // Create our objects.
-  fstream writestream;
-  writestream.open ("file.cfg", ios::binary | ios::out); //attempt to open file
-  if(!writestream.is_open()){ //check if empty
-    return false;
-  }
-  else{
-    config temp;
-    for(int i = 0; i < numberOfItems; i++){
-      //for reference
-      // bool blackList[numberOfItems];
-      // int priceBase[numberOfItems];
-      temp.blackList[i] = blackList(i); //lol
-      temp.priceBase[i] = priceBase(i); //lol
-    }
-    writestream.write(reinterpret_cast <char *> (&temp), sizeof(config));
-    writestream.close();  //close file
-    return true;
-  }
-}
-
-//attempt at config file indexer
-config getConfig(){
-  // Create our objects.
-  config temp;
-  fstream readstream;
-  readstream.open ("file.cfg", ios::binary | ios::in); //attempt to open file
-  if(!readstream.is_open()){ //check if empty
-    createConfig();
-    return getConfig();
-  }
-  else{
-    readstream.read(reinterpret_cast <char *> (&temp), sizeof(config));
-    readstream.close();  //close file
-    for(int i = 0; i < numberOfItems; i++){
-    }
-    return temp;
-  }
 }
 
 market createMarket(){
@@ -508,8 +524,8 @@ void functionTester(){
             char menue = GetChar();
             menue = tolower(menue);
             switch (menue) {
-              case '1': EditPlayer(playerData);
-              case '2': EditMarket(marketData);
+              case '1': EditPlayer(playerData); break;
+              case '2': EditMarket(marketData); break;
             }
           }
         }while(groupRunning);
@@ -807,8 +823,8 @@ void EditPlayer(player &playerData){
   int quantity = 0, ID = 0, selectionID = 0, selectionQTY = 0;
   float amount = 0;
   //for reference ... i do this a lot
-  //int item[y][x][z]; //Inventory [slot y][slot x][id,quantity]
-  //int hotbar[x][z]; //hotbar [slot x][id][quantity] (why did i include this? for continuity i guess)
+  //int item[y][x][z]; //Inventory [slot y][slot x][ID,quantity]
+  //int hotbar[x][z]; //hotbar [slot x][ID][quantity] (why did i include this? for continuity i guess)
 
   do{
     if(KeyHit()){
@@ -881,7 +897,7 @@ void EditPlayer(player &playerData){
         //for reference
         //inline void addToSlot(int slotID, int slotQTY, float quantity, int ID)
         //in any case <.< i want the same action to take place with these same variables so unless the user exits, this would happen every time
-        addToSlot(selectionID,selectionQTY,quantity,ID); //passing both ID and selectionID because the selection might be air, and then the id
+        addToSlot(selectionID,selectionQTY,quantity,ID); //passing both ID and selectionID because the selection might be air, and then the ID
         quantity = 0; //reset it to 0 reguardless of the outcome, since if it did not go into the inventory there is nowhere else for it to go
         break;
 
@@ -922,7 +938,7 @@ void EditPlayer(player &playerData){
 
         //exit section
         case '8': running = false; break;  //exit the switch and the do loop, repack, save then exit the function
-        case '9': running = false; return; //just exit the entire function without making any changes
+        case KEY_ESCAPE: running = false; return; //just exit the entire function without making any changes
 
         //invalid input section
         default:
@@ -995,7 +1011,7 @@ void EditMarket(market &marketData){
           selY = numberOfItems - 1;
         }
         //make sure item is not black listed in validated position
-        while(configTable.blackList[selY]){
+        while(blackList(selY)){
           //constantly change and validate new position untill item is not black listed
           selY--;
           selY %= numberOfItems;
@@ -1009,14 +1025,14 @@ void EditMarket(market &marketData){
         selX--;
         selX %= 6;
         if(selX < 0){
-          selX = marketItems - 1;
+          selX = 2;
         }
         break;
 
         case 's':
         selY++;
         selY %= numberOfItems;
-        while(configTable.blackList[selY]){
+        while(blackList(selY)){
           selY++;
           selY %= numberOfItems;
         }
@@ -1024,7 +1040,7 @@ void EditMarket(market &marketData){
 
         case 'd':
         selX++;
-        selX %= marketItems;
+        selX %= 3;
         break;
 
         case '1':
@@ -1085,96 +1101,180 @@ void dailyActions(player playerBase[10], market &marketToday){
   printLine('=');
   CenterString("daily actions!");
   printLine('=');
-  // LeftString(returnPlayerHeadder());
+  CenterString(returnPlayerHeadder());
   for(int i = 0; i < 10; i++){ //for each player
     // player playerData = retrievePlayer(0,i); <- more represens what would happen, keeping the most of the data out of memory,
     // so if/when the server shuts down sudenly noone loses anything
 
     int quantity;
-    quantity = rand() % 2; //add a random quantity to players inventory to simulate material gained by normal means
+    quantity = rand() % 10; //add a random quantity to players inventory to simulate material gained by normal means
     addToInventory(playerBase[i].inventoryHash,IDofEmranlds,quantity); //add the amount
 
     do{
-      quantity = -rand() % 5; //remove a random quantity to players inventory to simulate material lost by normal means
+      quantity = -rand() % 10; //remove a random quantity to players inventory to simulate material lost by normal means
     }while(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),IDofEmranlds) < -quantity); // make sure amount taken away is not greater than the amount the player has
     addToInventory(playerBase[i].inventoryHash,IDofEmranlds,quantity); //remove the amount
 
     if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),IDofEmranlds) > 20){
       printCash(marketToday,playerBase[i],10);
     }
+    float amount;
 
+    //credit player gets from mobs and other sources
     playerBase[i].creditBallance += rand() % 100;
-    playerBase[i].creditBallance -= rand() % 4000;
 
+    //credit player looses from taxes and other expences
+    do{
+      amount = rand() % 300;
+    }while(amount > playerBase[i].creditBallance);
+    playerBase[i].creditBallance -= amount;
+
+    //if player looses too much money exchange cash for more
     if(playerBase[i].creditBallance < 30){
-      exchangeChash(marketToday,playerBase[i],-playerBase[i].creditBallance);
+      exchangeChash(marketToday,playerBase[i],20);
     }
 
     for(int j = 0; j < numberOfItems; j++){ //for each item
-      if(!configTable.blackList[j]){ //only update items not on black list
+      if(!blackList(j)){ //only update items not on black list
         // by normal means
-        quantity = rand() % 30; //add a random quantity to players inventory to simulate material gained by normal means
+        quantity = rand() % (rarityTable(j) * 2); //add a random quantity to players inventory to simulate material gained by normal means
         addToInventory(playerBase[i].inventoryHash,j,quantity); //add the quantity
         do{
-          quantity = -rand() % 20; //remove a random quantity to players inventory to simulate material lost by normal means
-        }while(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) < -quantity); // make sure quantity taken away is not greater than the amount the player has
+          quantity = -(rand() % rarityTable(j)) ; //remove a random quantity to players inventory to simulate material lost by normal means
+        }while(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) < quantity); // make sure quantity taken away is not greater than the amount the player has
         addToInventory(playerBase[i].inventoryHash,j,quantity); //remove the quantity
 
         // by market
-        if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) < 10 ){ //if the player had less than 10 of items attempt buy 10 items
-          quantity = rand() % 20; //atempt to buy a random quantity
-          processItemTransaction(marketToday,playerBase[i],j,-quantity); //negitive because this is from the markets perspective
-        }
-        else if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) > 40){ //if the player had more than 20 of items attempt sell 10 items
+        if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) > 50){ //if the player had more than 20 of items attempt sell 10 items
           quantity = rand() % 20; //atempt to sell a random quantity
           processItemTransaction(marketToday,playerBase[i],j,quantity); //positive because this is from the markets perspective
         }
+        else if(getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),j) < 10 ){ //if the player had less than 10 of items attempt buy 10 items
+          quantity = rand() % 20; //atempt to buy a random quantity
+          processItemTransaction(marketToday,playerBase[i],j,-quantity); //negitive because this is from the markets perspective
+        }
+
       }
     }
     // printLine('-');
     // CenterString(build("this player has ",getQuantityFromInv(unhashInv(playerBase[i].inventoryHash),IDofEmranlds),"emralds"));
     // printLine('-');
-    LeftString(returnPlayerData(playerBase[i]));
+    CenterString(returnPlayerData(playerBase[i]));
     // updatePlayer(playerData); //save actions to player to database <- more represens what would happen, keeping the most of the data out of memory,
     // so if/when the server shuts down sudenly noone loses anything
   }
 }
 
-void shiftback(float array[40], float entery){
-  for(int i = 39; i > 0; i--){
-    array[i] = array[i - 1];
+void logEntery(float array[][logLength], float entery[], int sets){
+  for(int i = 0; i < sets; i++){
+    for(int j = logLength - 1; j > 0; j--){
+      array[i][j] = array[i][j - 1];
+    }
+    array[i][0] = entery[i];
   }
-  array[0] = entery;
 }
 
 void Simulation(){
-  if(!remove("player.bin"))
-  CenterString("deleted playerFile");
-  if(!remove("market.bin"))
-  CenterString("deleted marketFile");
-  if(!remove("Market_Today.bin"))
-  CenterString("deleted marketlog");
-  CenterString("Generating new marketFile");
+
+  CenterString("Generating new market");
   market marketToday = createMarket();
-  float marketLog[40]; //for super fast logging, keeping it in memory.
-  memset(marketLog,3,sizeof(marketLog));
+
+  CenterString("Generating new marketLog");
+
+  //number of data sets to log for the items (count the items that are not black listed)
+  int itemLogSets = 0;
+  for(int i = 0; i < numberOfItems; i++){
+    if(!blackList(i)){
+      itemLogSets++;
+    }
+  }
+
+  //prefix for to label each point on the graph
+  char itemPrefix[itemLogSets];
+  int index = 0;
+  for(int i = 0; i < numberOfItems; i++){
+    if(!blackList(i)){
+      itemPrefix[index] = lookupItem(i)[0];
+      index++;
+    }
+  }
+
+  float itemLog[itemLogSets][logLength]; //for super fast logging, keeping it in memory.
+  memset(itemLog,0,sizeof(itemLog));
+
+  //number of data sets to log
+  const int marketlogSets = 1;
+
+  //prefix for to label each point on the graph
+  char marketPrefix[marketlogSets] = {'B'};
+
+  float marketLog[marketlogSets][logLength]; //for super fast logging, keeping it in memory.
+  memset(marketLog,0,sizeof(marketLog));
+
   CenterString("Generating new players");
   player playerBase[10];
   for(int i = 0; i < 10; i++){
     //due to me wanting to improve preformance, im going to use the filesystem less and keep as much as i can in MEMORY
     //this reflecs less on the actual operation of the plugin but improves the simulation Speed
-    playerBase[i] = createPlayer(generateUUID());
-    updatePlayer(playerBase[i]);
+    playerBase[i] = createPlayer(i + 1);
   }
   bool running = true;
+  int day = 0;
   do{
+    sleep(50);
     cout << string(100,'\n');
-    CenterString(build("ballance",marketToday.ballance,"$"));
+    day++;
+
+    //build the entery for all sets
+    float marketEntery[marketlogSets];
+    marketEntery[0] = marketToday.ballance;
+    // entery[1] = marketToday.thing[IDofDiamonds].salePrice; // = the current price of diamonds
+
+    //build the entery for all sets
+    float itemEntery[itemLogSets];
+    int index = 0;
+    for(int i = 0; i < numberOfItems; i++){
+      if(!blackList(i)){
+        itemEntery[index] = marketToday.thing[i].salePrice;
+        index++;
+      }
+    }
+
+    //log the entery into the log and shift the reast of the enterys over (finite log size of logsize [60])
+    //for reference
+    //void logEntery(float array[][logLength], float entery[], int sets)
+    logEntery(marketLog,marketEntery,marketlogSets);
+    logEntery(itemLog,itemEntery,itemLogSets);
+
+    printLine('=');
+
+    //Labels and current values for each data set in graph
+    CenterString(build("current day: ",day,""));
+    CenterString(build("ballance ",marketToday.ballance," $"));
+    printLine('-');
+
+    //for reference
+    // void displayGraph(float data[][logLength], int sets, char prefix[], int length)
     // displayMarketGraph(-1,100);
+    displayGraph(marketLog,marketlogSets,marketPrefix,logLength);
+
+    printLine('=');
+
+    //graph the price for each item on the market
+    displayGraph(itemLog,itemLogSets,itemPrefix,logLength);
+
+    //actions that happen each day
     dailyActions(playerBase,marketToday);
-    shiftback(marketLog,marketToday.ballance);
-    displayGraph(marketLog,40);
+
+    //DISPLAYS MARKET TABLE
+    displayMarketData(marketToday,-1,-1);
+
+    //new day operations on market data
     newDay(marketToday);
+    for(int i = 0; i < 10; i++){
+      playerBase[i].quantityPrinted = 0;
+    }
+
   }while(running);
 }
 
@@ -1182,25 +1282,26 @@ void Simulation(){
 void newDay(market &newMarket){
   // market newMarket = retrieveMarketToday();
   for(int i = 0; i < numberOfItems; i++){
-    if(!configTable.blackList[i]){
+    if(!blackList(i)){
       int change = newMarket.thing[i].quantityChange;
+      newMarket.thing[i].quantityChange = 0; //set change back to 0
       float noise;
       if(change != 0)
       noise = (((rand() % 100) * .01) - 0.5) * 0.05;
       float salePrice = newMarket.thing[i].salePrice;
-      if(change < 0) //selling a lot
-      salePrice += salePrice * (.10 + (noise)); //increase average 10%
-      else if(change > 0) // buying a lot
-      salePrice -= salePrice * (.10 + (noise)); //decrease average 10%
-      else
+      if(change < 0){ //selling a lot
+        salePrice += salePrice * (.05 + noise); //increase average 10%
+      }
+      else if(change > 0){ // buying a lot
+        salePrice -= salePrice * (.05 + noise); //decrease average 10%
+      }
       if(change != 0){
         newMarket.thing[i].noise = noise;
-        newMarket.thing[i].quantityChange = change;
         newMarket.thing[i].salePrice = salePrice;
       }
     }
   }
-  purgeMining(); //purge player exchange limmit
+  // purgeMining(); //purge player exchange limmit <- disable for more speed
   // updateMarketToday(newMarket); //overwrites entre entery
   // logMarket(newMarket); <- Disabled for superSpeed
 }
@@ -1304,7 +1405,7 @@ bool processItemTransaction(market &marketToday, player &playerData, int ID, int
 
 //print money for emralds
 void printCash(market &marketToday, player &playerData, int quantity){
-  float priceOfDiamonds = marketToday.thing[20].salePrice; // = the current price of diamonds
+  float priceOfDiamonds = marketToday.thing[IDofDiamonds].salePrice; // = the current price of diamonds
   int sourceItems = getQuantityFromInv(unhashInv(playerData.inventoryHash),IDofEmranlds); //number of emralds player has
   int minnedToday = playerData.quantityPrinted; //retrieve from player
 
@@ -1335,7 +1436,7 @@ void printCash(market &marketToday, player &playerData, int quantity){
 //exchange cash for credit not the other way around
 void exchangeChash(market &marketToday, player &playerData, float amount){
 
-  float priceOfDiamonds = marketToday.thing[20].salePrice; // = the current price of diamonds
+  float priceOfDiamonds = marketToday.thing[IDofDiamonds].salePrice; // = the current price of diamonds
   float sourceBallance = playerData.cashBallance;
 
   if(sourceBallance < amount){
@@ -1359,7 +1460,7 @@ void makeAmo(market &marketToday, player &playerData, int quantity){
 
   float price = 0; // price of amunition....??? change this
   float sourceBallance = playerData.creditBallance;
-  float priceOfDiamonds = marketToday.thing[20].salePrice; //the current price of diamonds in case i need it
+  float priceOfDiamonds = marketToday.thing[IDofDiamonds].salePrice; //the current price of diamonds in case i need it
 
   if(sourceBallance < quantity * price){
     quantity = sourceBallance / price; // dont worry this would neer execute if price was 0 because of the prier condition 0 is not less than 0, and the source ballance could never go negitive
@@ -1422,8 +1523,8 @@ void addToInventory(InvHash &inventoryHash, int ID, int &quantity){
     //unpack inventory from hash
     Inventory invData = unhashInv(inventoryHash);
     //for reference (whats inside Inventory)
-    // int item[y][x][z]; //item [slot y][slot x][id,quantity]
-    // int hotbar[x][z]; //hotbar [slot x][id,quantity] (why did i include this? for continuity i guess)
+    // int item[y][x][z]; //item [slot y][slot x][ID,quantity]
+    // int hotbar[x][z]; //hotbar [slot x][ID,quantity] (why did i include this? for continuity i guess)
     for(int j = 0; j < 9; j++){
       for(int i = 0; i < 3; i++){
         //unpack the slot
@@ -1466,23 +1567,23 @@ void editPrice(float &price, float arg){
 }
 
 //generates random market information for specific item or random item if passed -1
-item generateItem(int id){
+item generateItem(int ID){
   //for reference
   // float noise;
   // float salePrice; //only store the sale price because the buy price is based on sell salePrice
   // int stock;
   // int quantityChange;
-  //if no id given make one up
-  if(id == -1){
+  //if no ID given make one up
+  if(ID == -1){
     do{
-      id = rand() % numberOfItems;
-    }while(configTable.blackList[id]); //make sure item is not black listed
+      ID = rand() % numberOfItems;
+    }while(blackList(ID)); //make sure item is not black listed
   }
   item item;
-  if(!configTable.blackList[id]){
+  if(!blackList(ID)){
     float noise = (((rand() % 100) * .01) - 0.5) * 0.05;
     item.noise = noise;
-    float basePrice = configTable.priceBase[id];
+    float basePrice = priceBase(ID);
     item.salePrice = basePrice + (basePrice * noise); //only store the sale price because the buy price is based on sell salePrice
     item.stock = rand() % 400;
     item.quantityChange = 0;
@@ -1497,12 +1598,12 @@ item generateItem(int id){
 }
 
 //generates random market information for specific item or random item if passed -1
-item createItem(int id){
+item createItem(int ID){
   item item;
-  if(!configTable.blackList[id]){
+  if(!blackList(ID)){
     float noise = 0;
     item.noise = noise;
-    float basePrice = configTable.priceBase[id];
+    float basePrice = priceBase(ID);
     item.salePrice = basePrice + (basePrice * noise); //only store the sale price because the buy price is based on sell salePrice
     item.stock = 0;
     item.quantityChange = 0;
@@ -1525,24 +1626,6 @@ market generateMarket(){
     marketData.thing[i] = generateItem(i);
   }
   return marketData;
-}
-
-//returns the name of the item
-string lookupItem(int id){
-  string table[] = {"Air","Stone","Grass","Dirt","Cobblestone","Planks","Sapling","Bedrock","flowing_water","still_water","flowing_lava","still_lava","sand","gravel","gold_ore","iron_ore","coal_ore","wood","leaves","sponge","glass","diamond","emrald"};
-  return table[id];
-}
-
-//returns the name of the item
-bool blackList(int id){
-  bool table[numberOfItems] = {1,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1};
-  return table[id];
-}
-
-//is base for price (will change to config file later)
-int priceBase(int id){
-  int table[numberOfItems] = {0,2,2,3,4,6,10,0,0,0,0,0,3,2,20,15,10,7,2,5,13,43};
-  return table[id];
 }
 
 //generates new player with givven UUID or random one if givver -1
@@ -1581,14 +1664,14 @@ Inventory generateInventory(){
   memset(inventoryData.item,0,sizeof(inventoryData.item));
   memset(inventoryData.hotbar,0,sizeof(inventoryData.hotbar));
   //for reference
-  // int item[3][9][2]; //Inventory [slot y][slot x][id,quantity]
-  // int hotbar[9][2]; //hotbar (why did i include this?) [slot x][id,quantity]
+  // int item[3][9][2]; //Inventory [slot y][slot x][ID,quantity]
+  // int hotbar[9][2]; //hotbar (why did i include this?) [slot x][ID,quantity]
   for(int j = 0; j < 9; j++){
     for(int i = 0; i < 3; i++){
       if(rand() % 2 == 0){
         do{
-          inventoryData.item[i][j][0] = rand() % numberOfItems; //id
-        }while(configTable.blackList[inventoryData.item[i][j][0]]); //make sure item is not black listed
+          inventoryData.item[i][j][0] = rand() % numberOfItems; //ID
+        }while(blackList(inventoryData.item[i][j][0])); //make sure item is not black listed
         inventoryData.item[i][j][1] = rand() % 50; //quantity
       }
       else{
@@ -1598,8 +1681,8 @@ Inventory generateInventory(){
     }
     if(rand() % 2 == 0){
       do{
-        inventoryData.hotbar[j][0] = rand() % numberOfItems; //id
-      }while(configTable.blackList[inventoryData.hotbar[j][0]]); //make sure item is not black listed
+        inventoryData.hotbar[j][0] = rand() % numberOfItems; //ID
+      }while(blackList(inventoryData.hotbar[j][0])); //make sure item is not black listed
       inventoryData.hotbar[j][1] = rand() % 50; //quantity
     }
     else{
@@ -1887,6 +1970,7 @@ bool logMarket(market data){
 
 // ill probably make this into its own function later then
 void displayMarketGraph(int ID, int length){
+  char prefix[1] = {'B'};
   // Create our objects.
   fstream countstream;
   int count = 0;
@@ -1908,7 +1992,7 @@ void displayMarketGraph(int ID, int length){
   }
 
   //declare table object
-  float valueTable[length];
+  float valueTable[1][logLength];
 
   //build table of the last length market items
   fstream readstream;
@@ -1921,75 +2005,93 @@ void displayMarketGraph(int ID, int length){
       readstream.read(reinterpret_cast <char *> (&temp), sizeof(market));
       if(!readstream.fail()){
         if(ID != -1){
-          valueTable[ArrayIndex] = temp.thing[ID].salePrice;
+          valueTable[0][ArrayIndex] = temp.thing[ID].salePrice;
         }
         else{
-          valueTable[ArrayIndex] = temp.ballance;
+          valueTable[0][ArrayIndex] = temp.ballance;
         }
       }
       else{
-        valueTable[ArrayIndex] = 0; //if for whatever reaon there is read error, 0
+        valueTable[0][ArrayIndex] = 0; //if for whatever reaon there is read error, 0
       }
       ArrayIndex++;
     }
   }
   readstream.close();
   //display the graph :D
-  displayGraph(valueTable,length);
+  displayGraph(valueTable,1,prefix,length);
 }
 
-void displayGraph(float data[], int length){
+void displayGraph(float data[][logLength], int sets, char prefix[], int length){
   // constants
-  const int gridWidth = 5, gridHeight = 5, height = 21; //height of the output graph
+  const int gridWidth = 10, gridHeight = 3, height = 9; //height of the output graph
+
+  length++; //include 0
 
   //domain restriction
-  if(length > display_Width - 12)
-  length = display_Width - 12; //if the length is too long limmit it
+  if(length > logLength - 1)
+  length = logLength - 1; //if the length is too long limmit it
 
-  //get the limmits and a copy of the data with the search domain of length
-  float cealing = *max_element(data,data+length);
-  float base = *min_element(data,data+length);
+  //get the minimum and maximum values of each element of each set ...
+  // get the max and minimum values of the first set
+  float cealing = *max_element(data[0],data[0]+length);
+  float base = *min_element(data[0],data[0]+length);
+  //get the max and minimum values of the rest of the sets
+  for(int i = 1; i < sets; i++){
+    //since the max_element wont work on this 2d array,
+    //i need to get each max and min value for each on the 1d arrays in the 2d array
+    //this would have gotten really messy without min and max
+    cealing = max(cealing,*max_element(data[i],data[i]+length));
+    base = min(base,*min_element(data[i],data[i]+length));
+  }
 
   //if the limmits are the same the graph is imposible, print the single value and return
   if(base == cealing){
-    //therefore cealing = celing2 not that i needed to know that or anything
-    cout << base;
+    CenterString(to_string(base));
     return;
   }
-  //if the limmits are the same the graph is imposible, print the single value and return
-  if(base == cealing){
-    // CenterString(String_2Decimals(to_string(base)));
-    return;
-  }
+
   //dsiaplay grid sideways with grid lines and axis markers
-  for(int j = height - 1; j >= 0; j--){
+  for(int j = height; j >= 0; j--){
     //index
-    float index = ((j * ((cealing - base)/(height - 1))) + base);
+    float index = ((j * ((cealing - base)/ height)) + base);
 
     //if function crosses 0 on an integer j value
     bool zero = (index == 0);
 
     //do this here since i dont need i for these
     //falls on an extents
-    bool top = (j == height - 1);
+    bool top = (j == height);
     bool bottom = (j == 0);
     //if falls on a gridline
     bool horizontal = (j % gridHeight == 0);
 
-    //y axis
     string outstring;
+
+    //y axis
     //conditions where the index should be shown
-    if (top || bottom || horizontal || zero)
-    outstring.append(bindCenter(String_2Decimals(to_string(index)),10));
+    if (top || bottom || horizontal || zero){
+      outstring.append(bindRight(String_2Decimals(to_string(index)),10));
+      outstring.push_back(' ');
+    }
+    //spaces inbetween
     else
-    outstring.append(string(10,' '));
+    outstring.append(string(11,' '));
 
     //each line
     for(int i = length - 1; i >= 0; i--){
-      int range = (data[i] - base) / (cealing - base) * height; // -1 because the for loop runs through the index numbers of 0 - height -1
-      if(j == range) //graph plot
-      outstring.push_back('*');
-      else{ //grid lines
+      int range[sets];
+      bool anyRange = false;
+      for(int k = 0; k < sets; k++){
+        range[k] = (data[k][i] - base) / (cealing - base) * height;
+        if(j == range[k]){
+          anyRange = true;
+          outstring.push_back(prefix[k]);
+          break;
+        }
+      }
+      //if the value of anny of the sets are within range of the plot ...
+      if(!anyRange){ //grid lines
         //terms
 
         //falls on an extents
@@ -2000,6 +2102,7 @@ void displayGraph(float data[], int length){
         bool virtical = (i % gridWidth == 0);
 
         //grid lines and magor axis
+
         //major axis
         if (right)
         outstring.push_back('I');
@@ -2015,7 +2118,6 @@ void displayGraph(float data[], int length){
         //virtical lines
         else if((leftSide || virtical) && (j % 2 == 0)) //for every other j for dashed lines
         outstring.push_back('|');
-
         //horizontal lines
         else if((top || horizontal || bottom) && (i % 2 == 0)) //for every other i for dashed lines
         outstring.push_back('-');
@@ -2024,26 +2126,23 @@ void displayGraph(float data[], int length){
         else
         outstring.push_back(' ');
       }
-
     }
     RightString(outstring);
   }
   //x axis
   string outstring;
-  outstring.append(string(10,' '));
+  outstring.append(string(11,' '));
   for(int i = length - 1; i >= 0; i--){
     //terms
     //falls on an extents
     bool leftSide = (i == length - 1);
     //if falls on a gridline
     bool virtical = (i % gridWidth == 0);
-    //output block
     string block;
     if(virtical || leftSide)
     block.append(to_string(-i));
     else
     block.push_back(' ');
-    //append block to outstring
     outstring.append(block);
     i -= (block.length() - 1); //skip the spaces taken up by block
   }
@@ -2141,7 +2240,9 @@ void displayMarketData(market marketData, int selY, int selX){
   displayMarketHeadder();
   for(int i = 0; i < numberOfItems; i++){
     string outstring;
-    CenterString(getItemData(marketData.thing[i],i,selY,selX));
+    if(!blackList(i)){
+      CenterString(getItemData(marketData.thing[i],i,selY,selX));
+    }
   }
 }
 
@@ -2152,10 +2253,10 @@ InvHash hashInv(Inventory dataTable){
   for(int k = 0; k < z; k++){
     for(int j = 0; j < x; j++){
       for(int i = 0; i < y; i++){
-        hashTag.InvTag[counter] = dataTable.item[i][j][k];
+        hashTag.InvTag[counter] = (char)dataTable.item[i][j][k];
         counter++;
       }
-      hashTag.HotTag[counter2] = dataTable.hotbar[j][k];
+      hashTag.HotTag[counter2] = (char)dataTable.hotbar[j][k];
       counter2++;
     }
   }
@@ -2379,14 +2480,14 @@ void printLong(string longString){
   unsigned int pos = 0;
   bool writing = true;
   do{
-    string outString;
+    string outstring;
     int wordlength = 0;
     for(int i = 0; i < display_Width - 4; i++){
       if(pos >= longString.length()){
         writing = false;
       }
       else{
-        outString.push_back(longString[pos]);
+        outstring.push_back(longString[pos]);
         if(longString[pos] == ' '){
           wordlength = 0;
         }
@@ -2399,10 +2500,10 @@ void printLong(string longString){
     if((writing) && (wordlength > 0)){
       pos -= wordlength;
       for(int j = 0; j < wordlength; j++){
-        outString.pop_back();
+        outstring.pop_back();
       }
     }
-    LeftString(outString);
+    LeftString(outstring);
   }while(writing);
 }
 
@@ -2424,11 +2525,11 @@ void printMultiString(string strArray[],int sizeOfStrArray){
       break;
     }
     //print what fits
-    string outString;
+    string outstring;
     for(int j = 0; j < quantityThatFits; j++){
-      outString.append(bindLeft(strArray[j],max));
+      outstring.append(bindLeft(strArray[j],max));
     }
-    LeftString(outString);
+    LeftString(outstring);
     //truncate array for recurcive call
     int SizeOfNewStrArray = (sizeOfStrArray/sizeof(string)) - quantityThatFits;
     string newStrArray[SizeOfNewStrArray];
@@ -2440,11 +2541,11 @@ void printMultiString(string strArray[],int sizeOfStrArray){
   }
   //print array of strings
   else{
-    string outString;
+    string outstring;
     for(unsigned int j = 0; j < sizeOfStrArray/sizeof(string); j++){
-      outString.append(bindLeft(strArray[j],max));
+      outstring.append(bindLeft(strArray[j],max));
     }
-    LeftString(outString);
+    LeftString(outstring);
   }
 }
 
