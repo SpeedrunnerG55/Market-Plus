@@ -27,6 +27,9 @@ using namespace std;
 int display_Width = 77;
 int graph_width = 80;
 int graph_height = 40;
+bool limmitHeight = false;
+int heightLimmit = 10;
+int thickness = 2;
 
 void printMultiString(string strArray[],int sizeOfStrArray);
 void printLong       (string longString);
@@ -160,7 +163,7 @@ void condenser(string arg[], int count){
 }
 
 //displays an expression as a graph
-void displayGraph(string input[], int sets, char label[], int x1, int x2, int curserIndex, int selection, int y1, int y2){
+void displayGraph(string input[], int sets, char label[], float x1, float x2, int curserIndex, int selection, float y1, float y2){
 
   printLine('=');
   CenterString("data Grapher");
@@ -169,7 +172,7 @@ void displayGraph(string input[], int sets, char label[], int x1, int x2, int cu
   string data[sets][graph_width + 1]; //an array that "carries" the minimun amount of data required to satisfy the graph function
 
   // constants
-  const int gridWidth = 5, gridHeight = 5; //height of the output graph
+  const int gridWidth = graph_width / 3, gridHeight = graph_height / 3; //height of the output graph
 
   if(x2 < x1){
     CenterString("what are these negitive domain shinangigans? get real");
@@ -282,7 +285,7 @@ void displayGraph(string input[], int sets, char label[], int x1, int x2, int cu
       for(int k = 0; k < sets; k++){
         if(!undifined[i] && !(i >= graph_width + 1)){
           range[k] = (numericTable[k][i] - base) / (cealing - base) * graph_height;
-          if((j >= range[k]) && (j < range[k] + 1)){
+          if((j >= range[k]) && (j < range[k] + thickness)){
             anyRange = true;
             outstring.push_back(label[k]);
             break;
@@ -527,6 +530,7 @@ string arithmatic(string arg){
   char type = '\0'; //in case a type is not determined
   bool first = true;
 
+
   for (unsigned int i = 0; i < arg.length(); i ++){
     switch (arg[i]) {
       case '^': type = '^'; first = false; break;
@@ -541,7 +545,7 @@ string arithmatic(string arg){
       case 'T': type = 'T'; break;
 
       case '-':
-      if( (arg[i-1] != '(') && !(isANumber(arg[i-1]))){
+        if(!((arg[i-1] == '(') || (arg[i-1] == '-') || (arg[i-1] == '+') || (arg[i-1] == '/') || (arg[i-1] == '*') || (arg[i-1] == 'S') || (arg[i-1] == 'C') || (arg[i-1] == 'T'))){
         first = false;
         type = '-';
         break;
@@ -797,18 +801,20 @@ int main(){
   string title = "Main Menue";
   string discription = "An expression grapher and explorer";
   string options[]= {
-    " 1 Enter new expression        ",
-    " 2 remove selected expression  ",
-    " 3 Reset range ",
-    " 4 normalize domain ",
-    " a d move left domain limmit   ",
-    " j l move right domain limmit  ",
-    " A D move both domain limmit   ",
-    " w s move lower range limit    ",
-    " i k move upper rannge limmit  ",
-    " W S move both range limmit    ",
-    " t g move selection            ",
-    " f h move curser left and right"
+    " 1 Enter new expression          ",
+    " 2 remove selected expression    ",
+    " 3 Reset range                   ",
+    " 4 normalize domain              ",
+    " a d move left domain limmit     ",
+    " j l move right domain limmit    ",
+    " A D move both domain limmit     ",
+    " w s move lower range limit      ",
+    " i k move upper rannge limmit    ",
+    " W S move both range limmit      ",
+    " t g move selection              ",
+    " f h move curser left and right  ",
+    " + - amplify and atenuate effects",
+    " [ ] expand and colaps window    "
   };
 
   const int maxSets = 50; //maximum number os sets
@@ -820,10 +826,10 @@ int main(){
   int selection = 0;
 
   //domain
-  int x1 = -30, x2 = 30;  //current domain restriction (not fixed)
+  float x1 = -30, x2 = 30;  //current domain restriction (not fixed)
 
   //range
-  int y1 = 0, y2 = 0;
+  float y1 = 0, y2 = 0;
 
   //curser
   int curser = 0;
@@ -831,8 +837,11 @@ int main(){
   //counters
   int sets = 0; //current number of sets
 
+  float scaler = 1;
+
   //display the menue
   displayMenue(title,discription,options,sizeof(options));
+  CenterString(build("current rate: ",scaler,""));
 
   bool graph = false;
   bool running = true;
@@ -844,6 +853,24 @@ int main(){
 
         //quit
         case KEY_ESCAPE: running = false; break;
+
+        //scaling
+        case '+': scaler *= 10; break;
+        case '-': scaler /= 10; break;
+
+        //thickness
+        case '.': thickness++; break;
+        case ',': thickness--; break;
+
+        //expanding
+        case ']':
+        graph_width++;
+        graph_height++;
+        break;
+        case '[':
+        graph_width--;
+        graph_height--;
+        break;
 
         //Expression Manipulation
         case 't':
@@ -861,18 +888,18 @@ int main(){
         break;
 
         //Domain Manipulation
-        case 'd': x1++; break;
-        case 'l': x2++; break;
-        case 'a': x1--; break;
-        case 'j': x2--; break;
+        case 'd': x1 += scaler; break;
+        case 'l': x2 += scaler; break;
+        case 'a': x1 -= scaler; break;
+        case 'j': x2 -= scaler; break;
         case 'D':
-        x1++;
-        x2++;
+        x1 += scaler;
+        x2 += scaler;
         break;
         case 'A':
-        x1--;
-        x2--;
-        break;
+        x1 -= scaler;
+        x2 -= scaler;
+        break;y2--;
 
         //curser
         //mmove curser left
@@ -885,22 +912,23 @@ int main(){
         break;
 
         //dimain limmit adjustment
-        case 'w': y1++; break;
-        case 'i': y2++; break;
-        case 's': y1--; break;
-        case 'k': y2--; break;
+        case 'w': y1 += scaler; break;
+        case 'i': y2 += scaler; break;
+        case 's': y1 -= scaler; break;
+        case 'k': y2 -= scaler; break;
         case 'W':
-        y1++;
-        y2++;
+        y1 += scaler;
+        y2 += scaler;
         break;
         case 'S':
-        y1--;
-        y2--;
+        y1 -= scaler;
+        y2 -= scaler;
         break;
 
         //add set
         case '1':
         if(sets < 50){
+          printLine('=');
           CenterString("Graphing Y = f(x) enter definition for f(x)");
           CenterString("you may use x as a variable.  will graph initially from -30 to 30");
           getline(cin,input[sets]);
@@ -968,9 +996,10 @@ int main(){
         // void displayGraph(string data[][log_Limmit], int sets, char label[], int x1, int x2, int curser, int selection, int lim1, int lim2){
         displayGraph(input,sets,label,x1,x2,curser,selection,y1,y2);
       }
-      CenterString(build("current numer of expressions :",sets,""));
       displayExpressionList(input,sets,selection);
+      CenterString(build("current numer of expressions :",sets,""));
       displayMenue(title,discription,options,sizeof(options));
+      CenterString(build("current rate: ",scaler,""));
     }
   }while(running);
 
