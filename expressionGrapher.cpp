@@ -539,6 +539,9 @@ string arithmatic(string arg){
       case '%': type = '%'; first = false; break;
       case '+': type = '+'; first = false; break;
 
+      //sqrt is unary
+      case '[': type = '['; break;
+
       //trig functions
       case 'S': type = 'S'; break;
       case 'C': type = 'C'; break;
@@ -573,6 +576,8 @@ string arithmatic(string arg){
       case '%': answere = to_string(stoi(left) % stoi(right)); break;
       case '+': answere = to_string(stod(left) + stod(right)); break;
       case '-': answere = to_string(stod(left) - stod(right)); break;
+      //square roots are unary
+      case '[': answere = to_string(sqrt(stod(left)));break;
       //trig operations (also unary type operations)
       case 'S': answere = to_string(sin(stod(left))); break;
       case 'C': answere = to_string(cos(stod(left))); break;
