@@ -405,7 +405,7 @@ void displayGraph(string input[], int sets, char label[], float x1, float x2, in
     if( Xzero )
     block.push_back('0');
     else if( virtical || right || left || curserLine )
-    block.append(to_string((int)xValue));
+    block.append(String_2Decimals(to_string(xValue)));
     // block.push_back('+');
     else
     block.push_back(' ');

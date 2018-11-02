@@ -38,6 +38,7 @@ add -std=c++11 as a compiler option in g++ or gcc
 #define getInput(output,input) cout << "| " << output << " >"; cin>>input
 
 const int numberOfItems = 23; //represents the quantity of items that exist
+const int numberOfPlayers = 30; //represents the quantity of players for simulation
 const int IDofEmranlds = 22;
 const int IDofDiamonds = 21;
 const int nameLength = 20;
@@ -1097,12 +1098,12 @@ void EditMarket(market &marketData){
 }
 
 
-void dailyActions(player playerBase[10], market &marketToday){
+void dailyActions(player playerBase[numberOfPlayers], market &marketToday){
   printLine('=');
   CenterString("daily actions!");
   printLine('=');
   CenterString(returnPlayerHeadder());
-  for(int i = 0; i < 10; i++){ //for each player
+  for(int i = 0; i < numberOfPlayers; i++){ //for each player
     // player playerData = retrievePlayer(0,i); <- more represens what would happen, keeping the most of the data out of memory,
     // so if/when the server shuts down sudenly noone loses anything
 
@@ -1212,8 +1213,8 @@ void Simulation(){
   memset(marketLog,0,sizeof(marketLog));
 
   CenterString("Generating new players");
-  player playerBase[10];
-  for(int i = 0; i < 10; i++){
+  player playerBase[numberOfPlayers];
+  for(int i = 0; i < numberOfPlayers; i++){
     //due to me wanting to improve preformance, im going to use the filesystem less and keep as much as i can in MEMORY
     //this reflecs less on the actual operation of the plugin but improves the simulation Speed
     playerBase[i] = createPlayer(i + 1);
@@ -2036,6 +2037,7 @@ void displayGraph(float data[][logLength], int sets, char prefix[], int length){
   // get the max and minimum values of the first set
   float cealing = *max_element(data[0],data[0]+length);
   float base = *min_element(data[0],data[0]+length);
+
   //get the max and minimum values of the rest of the sets
   for(int i = 1; i < sets; i++){
     //since the max_element wont work on this 2d array,
